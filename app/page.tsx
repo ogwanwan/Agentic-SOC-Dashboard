@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -33,17 +33,20 @@ import {
   Waypoints,
   Wrench,
   XCircle,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -53,7 +56,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import resultData from "@/data/incidents.generated.json";
 
 type Incident = (typeof resultData.incidents)[number];
@@ -209,7 +212,6 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
     name,
     value: incidents.filter((item) => item.severity === name).length,
   })).filter((item) => item.value > 0), [incidents]);
-  const timelineMax = Math.max(1, ...timelineData.flatMap((item) => [item.threat, item.benign, item.inconclusive]));
   const severityColors: Record<string, string> = { CRITICAL: "#ff5e68", HIGH: "#ff875f", MEDIUM: "#f4b84a", LOW: "#5da9ff", UNKNOWN: "#718792" };
 
   const attention = useMemo(() => [...incidents]
@@ -220,10 +222,10 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
     .slice(0, 5), [incidents]);
 
   const cards = [
-    { label: "전체 사건", value: counts.all, note: "조사 결과", color: "text-cyan-300", icon: Layers3 },
-    { label: "위협 확인", value: counts.threat, note: "판정 완료", color: "text-rose-300", icon: ShieldAlert },
-    { label: "비위협 판정", value: counts.benign, note: "오탐 포함", color: "text-emerald-300", icon: ShieldCheck },
-    { label: "결론 불충분", value: counts.inconclusive, note: "추가 확인", color: "text-amber-300", icon: AlertTriangle },
+    { label: "전체 사건", value: counts.all, note: "조사 결과", color: "text-cyan-300", tone: "all", icon: Layers3 },
+    { label: "위협 확인", value: counts.threat, note: "판정 완료", color: "text-rose-300", tone: "threat", icon: ShieldAlert },
+    { label: "비위협 판정", value: counts.benign, note: "오탐 포함", color: "text-emerald-300", tone: "benign", icon: ShieldCheck },
+    { label: "결론 불충분", value: counts.inconclusive, note: "추가 확인", color: "text-amber-300", tone: "inconclusive", icon: AlertTriangle },
   ];
 
   return (
@@ -232,13 +234,13 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
         {cards.map((card) => {
           const Icon = card.icon;
           return (
-            <article key={card.label} className="signal-card p-5">
+            <article key={card.label} className={`signal-card overview-metric overview-metric--${card.tone} p-5`}>
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{card.label}</p>
-                <Icon className={`size-4 ${card.color}`} />
+                <span className="overview-metric__icon"><Icon className={`size-4 ${card.color}`} /></span>
               </div>
               <div className="mt-5 flex items-end justify-between gap-3">
-                <strong className="font-mono text-3xl font-semibold tracking-tight">{card.value}</strong>
+                <strong className={`font-mono text-3xl font-semibold tracking-tight ${card.color}`}>{card.value}</strong>
                 <span className="text-xs text-muted-foreground">{card.note}</span>
               </div>
             </article>
@@ -254,22 +256,18 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
             description="조사 완료 사건을 최초 탐지 시각 기준으로 집계합니다."
             trailing={<span className="font-mono text-xs text-muted-foreground">{timezone}</span>}
           />
-          <div className="chart-grid mt-7 flex h-72 items-end gap-3 overflow-x-auto border-b border-white/10 px-2 pt-6">
-            {timelineData.map((item) => (
-              <div key={item.stamp} className="flex h-full min-w-16 flex-1 flex-col justify-end">
-                <div className="flex h-[13rem] items-end justify-center gap-1.5" title={`${item.label} · 위협 ${item.threat}, 비위협 ${item.benign}, 불충분 ${item.inconclusive}`}>
-                  {[
-                    { value: item.threat, color: "bg-rose-400/90" },
-                    { value: item.benign, color: "bg-emerald-400/80" },
-                    { value: item.inconclusive, color: "bg-amber-400/80" },
-                  ].map((bar, index) => {
-                    const height = Math.max(bar.value ? 7 : 0, (bar.value / timelineMax) * 100);
-                    return <div key={index} className="relative h-full w-4"><span className="absolute left-1/2 -translate-x-1/2 font-mono text-[0.68rem] font-semibold text-slate-300" style={{ bottom: `calc(${height}% + 0.3rem)` }}>{bar.value}</span><i className={`absolute inset-x-0 bottom-0 rounded-t transition-all ${bar.color}`} style={{ height: `${height}%` }} /></div>;
-                  })}
-                </div>
-                <p className="mt-3 truncate text-center font-mono text-[0.65rem] text-slate-500">{item.label}</p>
-              </div>
-            ))}
+          <div className="mt-7 h-72 min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={timelineData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }} barCategoryGap="32.5%" accessibilityLayer={false}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1b3038" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#718792", fontSize: 11 }} />
+                <YAxis tickLine={false} axisLine={false} allowDecimals={false} tick={{ fill: "#718792", fontSize: 11 }} />
+                <Tooltip cursor={false} formatter={(value, name) => [`${value}건`, name]} contentStyle={{ background: "#0c181e", border: "1px solid #213942", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="threat" name="위협 확인" fill="#ff5e68" radius={[3, 3, 0, 0]} activeBar={false} />
+                <Bar dataKey="benign" name="비위협 판정" fill="#55d58b" radius={[3, 3, 0, 0]} activeBar={false} />
+                <Bar dataKey="inconclusive" name="결론 불충분" fill="#f4b84a" radius={[3, 3, 0, 0]} activeBar={false} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-2"><i className="size-2 rounded-full bg-rose-400" />위협 확인</span>
@@ -417,6 +415,10 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
 
 function IncidentGraph({ incident, timezone }: { incident: Incident; timezone: Timezone }) {
   const [active, setActive] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragOrigin, setDragOrigin] = useState({ x: 0, y: 0 });
   const nodes = useMemo(() => {
     const sourceNodes = incident.srcIp ? [{ id: `source-${incident.srcIp}`, label: "출발지", title: incident.srcIp, detail: incident.detectionSource || "외부 접근 주체", icon: Network, color: "rose" }] : [];
     const eventNodes = incident.timeline.length
@@ -428,19 +430,47 @@ function IncidentGraph({ incident, timezone }: { incident: Incident; timezone: T
     const targetNodes = [...new Set(systems)].map((system) => ({ id: `target-${system}`, label: "영향 시스템", title: system, detail: incident.title, icon: Server, color: "violet" }));
     return [...sourceNodes, ...eventNodes, ...targetNodes];
   }, [incident, timezone]);
+  const fitZoom = Math.max(0.55, Math.min(1, 4 / Math.max(nodes.length, 1)));
+
+  useEffect(() => {
+    setActive(0);
+    setZoom(Math.max(0.55, Math.min(1, 4 / Math.max(nodes.length, 1))));
+    setPan({ x: 0, y: 0 });
+  }, [incident.investigationId, nodes.length]);
+
+  const changeZoom = (next: number) => setZoom(Math.min(1.6, Math.max(0.5, Number(next.toFixed(2)))));
+  const fitGraph = () => {
+    setZoom(fitZoom);
+    setPan({ x: 0, y: 0 });
+  };
   const selected = nodes[active];
   if (!selected) return null;
   const SelectedIcon = selected.icon;
   return <section className="attack-graph signal-card p-5">
-    <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Attack path graph</p><h3 className="mt-2 font-semibold">사건 연결 관계</h3></div><span className="font-mono text-xs text-muted-foreground">Nodes {nodes.length} · Edges {nodes.length - 1}</span></div>
-    <div className="mt-5 overflow-x-auto pb-3"><div className="flex min-w-[760px] items-center">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Attack path graph</p><h3 className="mt-2 font-semibold">사건 연결 관계</h3></div><div className="flex items-center gap-3"><span className="font-mono text-xs text-muted-foreground">Nodes {nodes.length} · Edges {nodes.length - 1}</span><div className="attack-zoom-controls" aria-label="그래프 확대 및 축소"><button type="button" onClick={() => changeZoom(zoom - 0.1)} disabled={zoom <= 0.5} aria-label="축소"><ZoomOut className="size-4" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" onClick={() => changeZoom(zoom + 0.1)} disabled={zoom >= 1.6} aria-label="확대"><ZoomIn className="size-4" /></button><button type="button" onClick={fitGraph} aria-label="화면에 맞춤" title="화면에 맞춤"><Maximize2 className="size-4" /></button></div></div></div>
+    <div
+      className={`attack-graph__viewport mt-5 ${dragging ? "is-dragging" : ""}`}
+      onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); changeZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1)); } }}
+      onPointerDown={(event) => {
+        if ((event.target as Element).closest("button")) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(true);
+        setDragOrigin({ x: event.clientX - pan.x, y: event.clientY - pan.y });
+      }}
+      onPointerMove={(event) => { if (dragging) setPan({ x: event.clientX - dragOrigin.x, y: event.clientY - dragOrigin.y }); }}
+      onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); setDragging(false); }}
+      onPointerCancel={() => setDragging(false)}
+    >
+      <div className="attack-graph__stage" style={{ minWidth: `${Math.max(760, nodes.length * 195)}px`, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transition: dragging ? "none" : undefined }}><div className="flex items-center">
       {nodes.map((node, index) => { const Icon = node.icon; return <div key={node.id} className="flex min-w-0 flex-1 items-center">
         <button type="button" onClick={() => setActive(index)} className={`attack-node attack-node--${node.color} ${active === index ? "is-active" : ""}`} aria-pressed={active === index}>
           <span className="attack-node__icon"><Icon className="size-5" /></span><span className="text-left"><small>{node.label}</small><strong>{node.title}</strong><em>{node.detail}</em></span>
         </button>
         {index < nodes.length - 1 && <div className="attack-edge"><span>{nodes[index + 1].label}</span><i /></div>}
       </div>; })}
-    </div></div>
+      </div></div>
+    </div>
+    <p className="mt-2 text-right text-[0.7rem] text-muted-foreground">빈 공간을 드래그해 이동 · 버튼 또는 Ctrl/⌘ + 휠로 확대·축소</p>
     <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
   </section>;
 }
@@ -452,17 +482,17 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
   const layers = [...new Set(allEvidence.map((item) => item.layer))];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[min(96vw,1100px)] gap-0 border-white/10 bg-[#080d14] p-0 sm:max-w-none">
-        <SheetHeader className="border-b border-white/8 bg-[#0b121c] px-6 py-5 pr-14">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="incident-dialog">
+        <DialogHeader className="border-b border-white/8 bg-[#0b121c] px-6 py-5 pr-14 text-left">
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={incident.severity} />
             <VerdictLabel verdict={incident.verdict} />
             <ProvenanceBadge status={incident.provenance.status} />
           </div>
-          <SheetTitle className="mt-3 text-xl text-slate-100">{incident.title}</SheetTitle>
-          <SheetDescription className="font-mono text-xs">{incident.incidentId} · {incident.host} · {formatDate(incident.triggerTime, timezone)} {timezone}</SheetDescription>
-        </SheetHeader>
+          <DialogTitle className="mt-3 text-xl leading-7 text-slate-100">{incident.title}</DialogTitle>
+          <DialogDescription className="font-mono text-xs">{incident.incidentId} · {incident.host} · {formatDate(incident.triggerTime, timezone)} {timezone}</DialogDescription>
+        </DialogHeader>
 
         <Tabs defaultValue="summary" className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b border-white/8 bg-[#0b121c] px-5 py-2">
@@ -561,8 +591,8 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
             </TabsContent>
           </div>
         </Tabs>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

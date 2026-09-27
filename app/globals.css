@@ -97,6 +97,15 @@ button { cursor: pointer; }
   background: linear-gradient(145deg, rgba(12, 24, 30, 0.96), rgba(7, 16, 22, 0.94));
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.025), 0 16px 40px rgba(0,0,0,0.12);
 }
+.overview-metric { --metric-color: #29d3c2; position: relative; overflow: hidden; border-color: color-mix(in srgb, var(--metric-color) 34%, var(--border)); background: linear-gradient(135deg, color-mix(in srgb, var(--metric-color) 10%, transparent), rgba(7, 16, 22, 0.94) 58%); }
+.overview-metric::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--metric-color); content: ""; }
+.overview-metric--all { --metric-color: #29d3c2; }
+.overview-metric--threat { --metric-color: #ff5e68; }
+.overview-metric--benign { --metric-color: #55d58b; }
+.overview-metric--inconclusive { --metric-color: #f4b84a; }
+.overview-metric__icon { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid color-mix(in srgb, var(--metric-color) 35%, transparent); border-radius: .5rem; background: color-mix(in srgb, var(--metric-color) 11%, transparent); }
+.incident-dialog { display: flex; width: min(94vw, 1180px); height: 100dvh; max-width: none; max-height: 100dvh; flex-direction: column; gap: 0; overflow: hidden; padding: 0; border-block: 0; border-color: rgba(255,255,255,.1); border-radius: 0; background: #080d14; }
+@media (max-width: 640px) { .incident-dialog { width: 100vw; } }
 ::selection { background: rgba(41, 211, 194, 0.25); color: #fff; }
 
 .attack-graph {
@@ -104,6 +113,14 @@ button { cursor: pointer; }
   background-image: radial-gradient(circle, rgba(72, 111, 124, 0.25) 1px, transparent 1px);
   background-size: 18px 18px;
 }
+.attack-zoom-controls { display: flex; align-items: center; gap: .2rem; padding: .2rem; border: 1px solid var(--border); border-radius: .55rem; background: rgba(7,16,22,.9); }
+.attack-zoom-controls button { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .4rem; color: var(--muted-foreground); transition: color .15s ease, background .15s ease; }
+.attack-zoom-controls button:hover:not(:disabled) { color: var(--primary); background: rgba(41,211,194,.09); }
+.attack-zoom-controls button:disabled { opacity: .3; cursor: not-allowed; }
+.attack-zoom-controls output { min-width: 3rem; color: var(--foreground); font: 600 .7rem/1 var(--font-mono); text-align: center; }
+.attack-graph__viewport { overflow: hidden; min-height: 190px; padding: 1rem .75rem; border-radius: .55rem; background: rgba(2,9,13,.28); cursor: grab; touch-action: none; user-select: none; }
+.attack-graph__viewport.is-dragging { cursor: grabbing; }
+.attack-graph__stage { width: max-content; transform-origin: left center; transition: transform .16s ease; will-change: transform; }
 .attack-node { min-width: 145px; min-height: 132px; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding: .85rem; border: 1px solid var(--border); border-radius: .65rem; background: rgba(7,16,22,.94); transition: transform .16s ease, box-shadow .16s ease; }
 .attack-node:hover { transform: translateY(-2px); }
 .attack-node.is-active { box-shadow: 0 0 0 1px currentColor, 0 0 22px rgba(41,211,194,.13); }
