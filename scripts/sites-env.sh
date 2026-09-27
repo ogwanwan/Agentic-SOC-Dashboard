@@ -20,16 +20,16 @@ export WRANGLER_WRITE_LOGS=false
 export WRANGLER_LOG_PATH="${runtime_root}/wrangler/logs"
 export MINIFLARE_REGISTRY_PATH="${runtime_root}/wrangler/registry"
 
-# The runtime may provide a global npm cache. Keep the image's read-only Sites
-# seed separate and make this project's writable cache authoritative.
+# 런타임이 전역 npm 캐시를 제공할 수 있습니다. 이미지의 읽기 전용 Sites 시드와
+# 이 프로젝트의 쓰기 가능한 기준 캐시를 분리합니다.
 unset NPM_CONFIG_CACHE npm_config_cache || true
 export npm_config_cache="${runtime_root}/npm-cache"
 export npm_config_audit=false
 export npm_config_fund=false
 export npm_config_update_notifier=false
 
-# The runtime already supplies the standard HTTP(S)_PROXY variables. Remove
-# npm-specific aliases so npm 11 does not reinterpret or warn about them.
+# 런타임이 표준 HTTP(S)_PROXY 변수를 이미 제공합니다. npm 11이 이를 다시 해석하거나
+# 경고하지 않도록 npm 전용 별칭을 제거합니다.
 unset \
   npm_config_proxy \
   npm_config_http_proxy \

@@ -19,9 +19,9 @@ import { fileURLToPath } from "node:url";
 const MAX_PACKAGES = 100_000;
 const CACHE_SEEDS = new Set(["seed_used", "seed_unavailable", "seed_lockfile_mismatch", "decision_unavailable", "not_applicable"]);
 const STORE_STATES = new Set(["created", "seeded", "reused", "unavailable"]);
-// The caller may use operational status only for
-// initial-setup fallback; an established project always retains pnpm. Broad
-// fetch failures can include TLS/auth errors and stay fatal.
+// 호출자는 최초 설정의 대체 처리에만 운영 상태를 사용할 수 있습니다.
+// 이미 구성된 프로젝트는 항상 pnpm을 유지합니다. 광범위한 가져오기 실패에는
+// TLS·인증 오류가 포함될 수 있으므로 치명적 오류로 유지합니다.
 const OPERATIONAL_FAILURE_CODES = new Set([
   "ERR_PNPM_UNEXPECTED_STORE",
   "ERR_PNPM_UNEXPECTED_VIRTUAL_STORE",
@@ -36,8 +36,8 @@ const OPERATIONAL_FAILURE_CODES = new Set([
   "ERR_PNPM_FETCH_504",
 ]);
 
-// These are pnpm-reported package IDs, not an assertion about network bytes or
-// image-cache provenance. Do not interpret an installed-tree no-op as 100% reuse.
+// 다음 값은 pnpm이 보고한 패키지 ID이며 네트워크 바이트나 이미지 캐시 출처를
+// 보증하지 않습니다. 설치 트리에 변화가 없다고 해서 100% 재사용으로 해석하지 않습니다.
 export class InstallProgress {
   constructor(project) {
     this.project = path.resolve(project);
@@ -94,7 +94,7 @@ function writeReport(fd, report) {
     writeSync(fd, body, 0, "utf8");
     ftruncateSync(fd, Buffer.byteLength(body));
   } catch {
-    // Optional telemetry must not change installation behavior or expose its path.
+    // 선택형 원격 측정은 설치 동작을 바꾸거나 경로를 노출해서는 안 됩니다.
   }
 }
 
@@ -141,8 +141,8 @@ async function openLock(filename, waitSeconds) {
 }
 
 async function holdInstallLocks(projectLock, sharedLock, waitSeconds) {
-  // The shell holds both leases through stdin. EOF (including caller exit)
-  // releases the same open file descriptions that flock locked in its child.
+  // 셸은 표준 입력을 통해 두 임대 잠금을 유지합니다. 호출자 종료를 포함한 EOF는
+  // 자식 프로세스에서 flock이 잠근 동일한 열린 파일 설명자를 해제합니다.
   const requests = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const project = await openLock(projectLock, "0");
   let shared;
@@ -210,7 +210,7 @@ async function main() {
     const child = spawn(executable, args, { env, stdio: ["inherit", "pipe", "inherit"] });
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     lines.on("line", (line) => showLine(line, progress, failure));
-    // timeout/exec owns the inherited group. Relaying would deliver signals twice.
+    // timeout/exec가 상속된 그룹을 소유하므로 신호를 중계하면 두 번 전달됩니다.
     const signalHandlers = ["SIGINT", "SIGHUP", "SIGTERM"].map((signal) => {
       const handler = () => { receivedSignal ??= signal; };
       process.on(signal, handler);

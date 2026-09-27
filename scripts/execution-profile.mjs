@@ -5,7 +5,7 @@ export function readExecutionProfile() {
   try {
     settings = JSON.parse(readFileSync(new URL("../.sites-runtime/execution-profile.json", import.meta.url), "utf8"));
   } catch (error) {
-    // Clean clones and remote builds have no checkout-local selection.
+    // 새로 복제한 저장소와 원격 빌드에는 체크아웃별 선택 정보가 없습니다.
     if (error.code === "ENOENT") return "portable";
     throw error;
   }

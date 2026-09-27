@@ -15,9 +15,9 @@ import { fileURLToPath } from "node:url";
 
 const MAX_PACKAGES = 100_000;
 
-// npm reports tarball cache reads separately from registry metadata requests.
-// Count unique installed tarball URLs, not image seeds or network bytes. Require
-// complete coverage of npm's installed lock so older/partial logs stay unknown.
+// npm은 tarball 캐시 읽기와 레지스트리 메타데이터 요청을 구분해 보고합니다.
+// 이미지 시드나 네트워크 바이트가 아닌 설치된 고유 tarball URL을 계산합니다.
+// 오래되거나 일부만 남은 로그가 미확인 상태를 유지하도록 설치 잠금 전체를 요구합니다.
 export class NpmCacheProgress {
   entries = new Map();
   invalid = false;
@@ -35,7 +35,7 @@ export class NpmCacheProgress {
     );
     if (!match) return;
     const [, spec, status] = match;
-    // Pacote's direct content-cache log uses name@URL; HTTP cache logs use URL.
+    // Pacote의 직접 콘텐츠 캐시 로그는 name@URL을, HTTP 캐시 로그는 URL을 사용합니다.
     const url = spec.replace(/^(?:@[^/]+\/)?[^@/]+@(?=https?:\/\/)/, "");
     if (
       url.length > 4096 ||
@@ -64,8 +64,8 @@ export class NpmCacheProgress {
       if (this.registry) {
         const locked = new URL(url);
         if (locked.hostname === "registry.npmjs.org") {
-          // Match npm/pacote's host rewrite and registry-fetch's path prefix
-          // using npm's effective configuration, never an arbitrary suffix.
+          // 임의 접미사가 아닌 npm의 실제 설정을 사용해 npm/pacote의 호스트 재작성과
+          // registry-fetch의 경로 접두사를 일치시킵니다.
           candidates = [
             ...new Set([
               url,
@@ -86,7 +86,7 @@ export class NpmCacheProgress {
       )
         return {};
       for (const candidate of matches) observed.add(candidate);
-      // A corrupt direct-cache hit followed by a mirror fetch is a download.
+      // 손상된 직접 캐시 적중 뒤 미러에서 가져온 경우는 다운로드로 계산합니다.
       if (matches.some((candidate) => this.entries.get(candidate)))
         downloaded++;
     }
@@ -157,7 +157,7 @@ export async function runNpmInstall(command, cacheSeed = "not_applicable") {
     const lines = createInterface({ input: child.stderr, crlfDelay: Infinity });
     lines.on("line", (line) => {
       progress.accept(line);
-      // Do not add package URLs to normal helper output just for telemetry.
+      // 원격 측정만을 위해 일반 도우미 출력에 패키지 URL을 추가하지 않습니다.
       if (!line.startsWith("npm http ")) process.stderr.write(`${line}\n`);
     });
     let startError;
@@ -202,7 +202,7 @@ export async function runNpmInstall(command, cacheSeed = "not_applicable") {
         );
       }
     } catch {
-      // Telemetry must not change installation behavior.
+      // 원격 측정은 설치 동작을 변경해서는 안 됩니다.
     } finally {
       if (descriptor !== undefined) {
         try {

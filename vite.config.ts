@@ -9,7 +9,7 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
 
 const { d1, r2 } = hostingConfig;
 
-// macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
+// macOS Seatbelt가 FSEvents를 차단하므로 Codex 미리보기에서는 HMR 폴링이 필요합니다.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const managedLinux = readExecutionProfile() === "managed-linux";
 
@@ -36,18 +36,18 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
-  // Use Miniflare's local Request.cf placeholder unless fetching is requested.
+  // 별도 요청이 없으면 Miniflare의 로컬 Request.cf 자리표시자를 사용합니다.
   process.env.CLOUDFLARE_CF_FETCH_ENABLED ??= "false";
   process.env.WRANGLER_SEND_METRICS ??= "false";
 
-  // Keep Wrangler and Miniflare state project-local. These are non-secret tool
-  // settings; application environment belongs in ignored `.env*` files.
+  // Wrangler와 Miniflare 상태는 프로젝트 내부에 보관합니다. 이는 비밀이 아닌 도구
+  // 설정이며, 애플리케이션 환경 변수는 추적하지 않는 `.env*` 파일에 둡니다.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.WRANGLER_REGISTRY_PATH ??= ".wrangler/dev-registry";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
-  // Wrangler snapshots its log path while the Cloudflare plugin is imported.
+  // Wrangler는 Cloudflare 플러그인을 불러올 때 로그 경로를 확정합니다.
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {

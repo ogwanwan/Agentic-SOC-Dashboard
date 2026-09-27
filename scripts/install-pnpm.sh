@@ -25,7 +25,7 @@ store_state=unavailable
 report_store() {
   node "${script_dir}/pnpm-install.mjs" --report-store "${cache_seed}" "${store_scope}" "${store_state}" "${prepare_only}"
 }
-# Publish preparation failures too; the optional report never decides success.
+# 준비 단계의 실패도 보고하며, 선택형 보고 결과는 성공 여부를 결정하지 않습니다.
 trap 'report_store || true' EXIT
 
 if [[ -n "${SITES_PNPM_BIN:-}" && -f "${SITES_PNPM_BIN}" && -r "${SITES_PNPM_BIN}" ]]; then
@@ -34,8 +34,8 @@ elif [[ "${require_shared}" == 1 ]]; then
   echo "[sites] the image-pinned pnpm is unavailable" >&2
   exit 69
 elif command -v corepack >/dev/null; then
-  # Corepack honors the established project's pin even when PATH has a different
-  # pnpm version. A bare pnpm is used only if Corepack is absent, then verified.
+  # PATH에 다른 pnpm 버전이 있어도 Corepack은 프로젝트에 고정된 버전을 따릅니다.
+  # Corepack이 없을 때만 기본 pnpm을 사용하고 이후 버전을 검증합니다.
   pnpm_command=(corepack pnpm)
 elif command -v pnpm >/dev/null; then
   pnpm_command=(pnpm)
@@ -50,8 +50,8 @@ if [[ "${HOME}" != "${runtime_root}/home" || -L "${private_store}" ]]; then
   echo "Dependency setup requires a project-owned writable home and pnpm store." >&2
   exit 78
 fi
-# A single Node process owns the regular-file descriptors for both leases.
-# Closing its input (including this shell exiting) releases the project lock.
+# 하나의 Node 프로세스가 두 임대 잠금의 일반 파일 설명자를 소유합니다.
+# 이 셸의 종료를 포함해 입력이 닫히면 프로젝트 잠금이 해제됩니다.
 coproc SITES_INSTALL_LOCKS {
   node "${script_dir}/pnpm-install.mjs" --hold-install-locks \
     "${runtime_root}/install.lock" "${SITES_PNPM_SHARED_STORE:-}.seed.lock" \
@@ -84,7 +84,7 @@ fi
 
 can_write_directory() {
   local probe
-  # access()/test -w can succeed even when a kernel sandbox denies a write.
+  # 커널 샌드박스가 쓰기를 거부해도 access() 또는 test -w는 성공할 수 있습니다.
   probe="$(mktemp "${1}/.sites-store-probe.XXXXXX" 2>/dev/null)" || return 1
   rm -f -- "${probe}" 2>/dev/null
 }
@@ -99,8 +99,8 @@ release_shared_lock() {
 }
 
 acquire_shared_lock() {
-  # The Node holder opens this workspace-controlled entry with no-follow and
-  # nonblocking flags, then verifies a regular file before bounded flock.
+  # Node 잠금 소유자는 작업공간이 관리하는 항목을 링크 비추적·비차단 플래그로 열고,
+  # 일반 파일임을 검증한 뒤 제한 시간 flock을 적용합니다.
   printf '%s\n' shared >&"${install_lock_input}"
   local status
   if read -r status <&"${install_lock_output}" && [[ "${status}" == locked ]]; then
@@ -115,8 +115,8 @@ shared_store="${SITES_PNPM_SHARED_STORE:-}"
 if [[ "${shared_store}" == "/workspace/.sites-runtime/pnpm-store" &&
       ! -L "${shared_store}" && ! -L "${shared_store%/*}" &&
       -d "${shared_store%/*/*}" ]]; then
-  # Normal Work already writes this owner's workspace. Narrower profiles must
-  # pass the actual create probe, without widening their permissions.
+  # 일반 실행 환경은 이미 소유자의 작업공간에 쓸 수 있습니다. 더 제한적인 프로필은
+  # 권한을 넓히지 않고 실제 생성 검사를 통과해야 합니다.
   if mkdir -p "${shared_store%/*}" 2>/dev/null &&
       can_write_directory "${shared_store%/*}" &&
       acquire_shared_lock; then
@@ -143,7 +143,7 @@ fi
 seed="${SITES_PNPM_CACHE_SEED:-}"
 cache_seed=seed_unavailable
 if [[ -d "${writable_store}" ]]; then
-  # Never merge a newer image seed into an existing mutable store.
+  # 기존의 변경 가능한 저장소에는 더 새로운 이미지 시드를 병합하지 않습니다.
   store_state=reused
   cache_seed=not_applicable
   if [[ -f "${writable_store}/.sites-pnpm-seed-applied.json" ]]; then cache_seed=seed_used; fi
@@ -172,8 +172,8 @@ NODE
       "${SITES_PNPM_STORE_PREPARE_TIMEOUT:-60s}" bash -c \
       'cp -a --no-preserve=ownership "$1/." "$2/" && chmod -R u+rwX "$2"' _ "${seed}" "${seed_stage}" || exit 70
     cp "${seed}/.sites-pnpm-seed.json" "${seed_stage}/.sites-pnpm-seed-applied.json" || exit 70
-    # An ordinary pnpm command can initialize the store without our seed lock.
-    # Publish without replacing even an empty directory created by that command.
+    # 일반 pnpm 명령은 시드 잠금 없이 저장소를 초기화할 수 있습니다.
+    # 그 명령이 만든 빈 디렉터리라도 교체하지 않고 게시합니다.
     mv -T --update=none "${seed_stage}" "${writable_store}" || exit 70
     if [[ -d "${seed_stage}" ]]; then
       if [[ -L "${writable_store}" || ! -d "${writable_store}" ]]; then exit 78; fi
@@ -197,8 +197,8 @@ report_store
 trap - EXIT
 if [[ "${prepare_only}" == 1 ]]; then exit 0; fi
 
-# Configuration travels with source without embedding an absolute machine path.
-# A later restricted session selects a private store before its frozen repair.
+# 구성은 장비의 절대 경로를 포함하지 않은 채 소스와 함께 이동합니다.
+# 이후 제한된 세션은 고정 복구 전에 전용 저장소를 선택합니다.
 configured_store=.sites-runtime/pnpm-store
 if [[ "${store_scope}" == workspace ]]; then
   configured_store='${SITES_PNPM_SHARED_STORE:-.sites-runtime/pnpm-store}'
@@ -209,8 +209,8 @@ fi
 "${pnpm_command[@]}" config set store-dir "${configured_store}" --location project
 "${pnpm_command[@]}" config set cache-dir "${configured_store}/policy-cache" --location project
 
-# CI=true lets native pnpm install rebuild modules whose store moved, without a
-# prompt, --force, changing the lockfile, or translating the project into npm.
+# CI=true를 사용하면 프롬프트, --force, 잠금 파일 변경, npm 변환 없이도
+# 저장소 위치가 바뀐 모듈을 pnpm 설치 과정에서 다시 구성할 수 있습니다.
 CI=true timeout --signal=TERM --kill-after="${SITES_INSTALL_KILL_AFTER:-15s}" \
   "${SITES_INSTALL_TIMEOUT:-8m}" node "${script_dir}/pnpm-install.mjs" \
   "${cache_seed}" "${store_scope}" "${store_state}" "${writable_store}" "${pnpm_command[@]}"

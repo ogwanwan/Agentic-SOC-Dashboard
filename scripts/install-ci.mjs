@@ -26,7 +26,7 @@ if (readExecutionProfile() === "managed-linux") {
   process.exit(result.status ?? 1);
 }
 
-// Invoke npm's JavaScript entrypoint, avoiding platform-specific shell shims.
+// 운영체제별 셸 래퍼를 피하기 위해 npm의 JavaScript 진입점을 직접 실행합니다.
 const installed = await runNpmInstall([
   process.execPath,
     process.env.npm_execpath, "ci", "--prefix", projectRoot, "--workspaces=false",

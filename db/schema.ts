@@ -1,4 +1,4 @@
-// Intentionally empty by default.
-// Add Drizzle tables here when the site actually needs a database.
-// See examples/d1/db/schema.ts for an opt-in example.
+// 데이터베이스를 사용하기 전까지 의도적으로 비워 둡니다.
+// 데이터베이스가 필요해지면 이 파일에 Drizzle 테이블을 추가합니다.
+// 선택형 예시는 examples/d1/db/schema.ts에서 확인할 수 있습니다.
 export {};

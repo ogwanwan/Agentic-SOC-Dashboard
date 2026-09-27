@@ -14,7 +14,7 @@ if (managedLinux && command === "build") {
   process.exit(result.status ?? 1);
 }
 
-// Import in this process so the preview owner retains its PID and signals.
+// 미리보기 소유 프로세스가 PID와 신호를 유지하도록 현재 프로세스에서 불러옵니다.
 const cli = new URL(managedLinux
   ? "../node_modules/vite/bin/vite.js"
   : "../node_modules/vinext/dist/cli.js", import.meta.url);
