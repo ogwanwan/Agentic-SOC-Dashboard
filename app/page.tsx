@@ -53,10 +53,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import resultData from "@/data/incidents.generated.json";
 
 type Incident = (typeof resultData.incidents)[number];
 type View = "overview" | "incidents" | "operations" | "pipeline";
+type Timezone = "UTC" | "KST";
 
 const navigation = [
   { id: "overview" as View, label: "Overview", description: "전체 흐름", icon: LayoutDashboard },
@@ -87,7 +89,7 @@ const verdictMeta: Record<string, { label: string; color: string; icon: typeof S
   INCONCLUSIVE: { label: "결론 불충분", color: "text-amber-300", icon: AlertTriangle },
 };
 
-function formatDate(value: string, withDate = true) {
+function formatDate(value: string, timezone: Timezone, withDate = true) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -97,7 +99,7 @@ function formatDate(value: string, withDate = true) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "UTC",
+    timeZone: timezone === "KST" ? "Asia/Seoul" : "UTC",
   }).format(date);
 }
 
@@ -174,7 +176,7 @@ function EmptyMetric({ label }: { label: string }) {
   );
 }
 
-function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void }) {
+function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void; timezone: Timezone }) {
   const counts = useMemo(() => ({
     all: incidents.length,
     threat: incidents.filter((item) => item.verdict === "THREAT_CONFIRMED").length,
@@ -190,7 +192,7 @@ function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpen
       const key = parsed.toISOString().slice(0, 13);
       const bucket = buckets.get(key) ?? {
         stamp: parsed.setMinutes(0, 0, 0),
-        label: formatDate(parsed.toISOString()),
+        label: formatDate(parsed.toISOString(), timezone),
         threat: 0,
         benign: 0,
         inconclusive: 0,
@@ -201,14 +203,14 @@ function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpen
       buckets.set(key, bucket);
     }
     return [...buckets.values()].sort((a, b) => a.stamp - b.stamp);
-  }, [incidents]);
+  }, [incidents, timezone]);
 
   const severityData = useMemo(() => ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"].map((name) => ({
     name,
     value: incidents.filter((item) => item.severity === name).length,
   })).filter((item) => item.value > 0), [incidents]);
   const timelineMax = Math.max(1, ...timelineData.flatMap((item) => [item.threat, item.benign, item.inconclusive]));
-  const severityMax = Math.max(1, ...severityData.map((item) => item.value));
+  const severityColors: Record<string, string> = { CRITICAL: "#ff5e68", HIGH: "#ff875f", MEDIUM: "#f4b84a", LOW: "#5da9ff", UNKNOWN: "#718792" };
 
   const attention = useMemo(() => [...incidents]
     .sort((a, b) => {
@@ -250,7 +252,7 @@ function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpen
             icon={BarChart3}
             title="시간대별 판정 추이"
             description="조사 완료 사건을 최초 탐지 시각 기준으로 집계합니다."
-            trailing={<span className="rounded-md bg-white/5 px-2 py-1 font-mono text-xs text-muted-foreground">UTC</span>}
+            trailing={<span className="font-mono text-xs text-muted-foreground">{timezone}</span>}
           />
           <div className="chart-grid mt-7 flex h-72 items-end gap-3 overflow-x-auto border-b border-white/10 px-2 pt-6">
             {timelineData.map((item) => (
@@ -273,13 +275,21 @@ function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpen
 
         <article className="signal-card min-h-[25rem] p-5 sm:p-6">
           <PanelTitle icon={Activity} title="심각도 분포" description="최종 판정의 영향 수준" />
-          <div className="mt-8 h-64 space-y-5 pt-2">
-            {severityData.map((item) => (
-              <div key={item.name}>
-                <div className="mb-2 flex items-center justify-between text-xs"><span className="font-mono text-slate-400">{item.name}</span><span className="font-mono text-slate-200">{item.value}</span></div>
-                <div className="h-3 overflow-hidden rounded-full bg-white/5"><div className={`h-full rounded-full ${item.name === "CRITICAL" ? "bg-rose-400" : item.name === "MEDIUM" ? "bg-amber-400" : item.name === "LOW" ? "bg-blue-400" : "bg-slate-500"}`} style={{ width: `${(item.value / severityMax) * 100}%` }} /></div>
-              </div>
-            ))}
+          <div className="mt-5 grid min-h-64 grid-cols-[minmax(0,1fr)_8rem] items-center gap-2">
+            <div className="relative h-60 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart accessibilityLayer={false}>
+                  <Pie data={severityData} dataKey="value" nameKey="name" innerRadius={66} outerRadius={92} paddingAngle={3} cornerRadius={5} stroke="none">
+                    {severityData.map((item) => <Cell key={item.name} fill={severityColors[item.name]} />)}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [`${value}건`, name]} contentStyle={{ background: "#0c181e", border: "1px solid #26434d", borderRadius: 8, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 grid place-content-center text-center"><strong className="font-mono text-3xl">{incidents.length}</strong><span className="mt-1 text-xs text-muted-foreground">전체 사건</span></div>
+            </div>
+            <div className="space-y-3">
+              {severityData.map((item) => <div key={item.name} className="flex items-center justify-between gap-2 text-xs"><span className="flex items-center gap-2 font-mono text-slate-400"><i className="size-2 rounded-full" style={{ background: severityColors[item.name] }} />{item.name}</span><strong className="font-mono text-slate-200">{item.value}</strong></div>)}
+            </div>
           </div>
           <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3 text-sm text-muted-foreground">
             심각도는 조사 순서인 priority와 분리해 표시합니다.
@@ -330,7 +340,7 @@ function Overview({ incidents, onOpenIncident }: { incidents: Incident[]; onOpen
   );
 }
 
-function IncidentList({ incidents, onOpenIncident }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void }) {
+function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void; timezone: Timezone }) {
   const [query, setQuery] = useState("");
   const [verdict, setVerdict] = useState("ALL");
   const [severity, setSeverity] = useState("ALL");
@@ -390,7 +400,7 @@ function IncidentList({ incidents, onOpenIncident }: { incidents: Incident[]; on
               </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">+{incident.evidence.length} / −{incident.contradictingEvidence.length}</TableCell>
               <TableCell><ProvenanceBadge status={incident.provenance.status} /></TableCell>
-              <TableCell className="pr-5 text-right font-mono text-xs text-muted-foreground">{formatDate(incident.triggerTime)}</TableCell>
+              <TableCell className="pr-5 text-right font-mono text-xs text-muted-foreground">{formatDate(incident.triggerTime, timezone)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -400,7 +410,32 @@ function IncidentList({ incidents, onOpenIncident }: { incidents: Incident[]; on
   );
 }
 
-function IncidentDetail({ incident, open, onOpenChange }: { incident: Incident | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+function IncidentGraph({ incident }: { incident: Incident }) {
+  const [active, setActive] = useState(0);
+  const primaryEvidence = incident.evidence.find((item) => item.layer !== "network") ?? incident.evidence[0];
+  const nodes = [
+    { label: "출발지", title: incident.srcIp || "출발지 미확인", detail: "외부 접근 주체", icon: Network, color: "rose" },
+    { label: "탐지 행위", title: incident.triggerDescription, detail: incident.detectionSource, icon: ShieldAlert, color: "amber" },
+    { label: "대상 시스템", title: incident.host, detail: incident.affectedSystems.join(", ") || "영향 범위 확인 중", icon: Server, color: "cyan" },
+    { label: "관측 증거", title: primaryEvidence?.eventType ?? "증거 없음", detail: primaryEvidence?.description ?? "원본 로그 확인 필요", icon: Fingerprint, color: "violet" },
+  ];
+  const selected = nodes[active];
+  const SelectedIcon = selected.icon;
+  return <section className="attack-graph signal-card p-5">
+    <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Attack path graph</p><h3 className="mt-2 font-semibold">사건 연결 관계</h3></div><span className="font-mono text-xs text-muted-foreground">Nodes {nodes.length} · Edges {nodes.length - 1}</span></div>
+    <div className="mt-5 overflow-x-auto pb-3"><div className="flex min-w-[760px] items-center">
+      {nodes.map((node, index) => { const Icon = node.icon; return <div key={node.label} className="flex min-w-0 flex-1 items-center">
+        <button type="button" onClick={() => setActive(index)} className={`attack-node attack-node--${node.color} ${active === index ? "is-active" : ""}`} aria-pressed={active === index}>
+          <span className="attack-node__icon"><Icon className="size-5" /></span><span className="text-left"><small>{node.label}</small><strong>{node.title}</strong><em>{node.detail}</em></span>
+        </button>
+        {index < nodes.length - 1 && <div className="attack-edge"><span>{index === 0 ? "접속" : index === 1 ? "영향" : "관측"}</span><i /></div>}
+      </div>; })}
+    </div></div>
+    <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
+  </section>;
+}
+
+function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: Incident | null; open: boolean; onOpenChange: (open: boolean) => void; timezone: Timezone }) {
   if (!incident) return null;
   const allEvidence = [...incident.evidence, ...incident.contradictingEvidence].sort((a, b) => a.sequence - b.sequence);
   const timeline = incident.timeline.length ? incident.timeline : allEvidence.map((item) => ({ time: item.time, event: item.description, source: item.layer }));
@@ -416,7 +451,7 @@ function IncidentDetail({ incident, open, onOpenChange }: { incident: Incident |
             <ProvenanceBadge status={incident.provenance.status} />
           </div>
           <SheetTitle className="mt-3 text-xl text-slate-100">{incident.title}</SheetTitle>
-          <SheetDescription className="font-mono text-xs">{incident.incidentId} · {incident.host} · {formatDate(incident.triggerTime)} UTC</SheetDescription>
+          <SheetDescription className="font-mono text-xs">{incident.incidentId} · {incident.host} · {formatDate(incident.triggerTime, timezone)} {timezone}</SheetDescription>
         </SheetHeader>
 
         <Tabs defaultValue="summary" className="min-h-0 flex-1 gap-0">
@@ -429,6 +464,7 @@ function IncidentDetail({ incident, open, onOpenChange }: { incident: Incident |
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
             <TabsContent value="summary" className="space-y-5">
+              <IncidentGraph incident={incident} />
               <section className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr]">
                 <article className="signal-card p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Provisional conclusion</p>
@@ -476,7 +512,7 @@ function IncidentDetail({ incident, open, onOpenChange }: { incident: Incident |
               <section className="signal-card p-5">
                 <div className="flex items-center gap-2"><Clock3 className="size-4 text-cyan-300"/><h3 className="text-sm font-semibold">공격 타임라인</h3></div>
                 <div className="relative mt-6 space-y-6 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">
-                  {timeline.map((item, index) => <div key={`${item.time}-${index}`} className="relative pl-7"><span className="absolute left-0 top-1 size-3 rounded-full border-2 border-cyan-400 bg-[#0a111b]"/><p className="font-mono text-xs text-cyan-300">{formatDate(item.time)}</p><p className="mt-1 text-sm leading-6 text-slate-200">{item.event}</p>{item.source && <p className="mt-1 text-xs text-muted-foreground">{item.source}</p>}</div>)}
+                  {timeline.map((item, index) => <div key={`${item.time}-${index}`} className="relative pl-7"><span className="absolute left-0 top-1 size-3 rounded-full border-2 border-cyan-400 bg-[#0a111b]"/><p className="font-mono text-xs text-cyan-300">{formatDate(item.time, timezone)}</p><p className="mt-1 text-sm leading-6 text-slate-200">{item.event}</p>{item.source && <p className="mt-1 text-xs text-muted-foreground">{item.source}</p>}</div>)}
                 </div>
               </section>
 
@@ -484,7 +520,7 @@ function IncidentDetail({ incident, open, onOpenChange }: { incident: Incident |
                 <div className="border-b border-white/8 p-5"><div className="flex items-center gap-2"><FileCode2 className="size-4 text-violet-300"/><h3 className="text-sm font-semibold">증거 체인</h3></div><p className="mt-1 text-xs text-muted-foreground">설명은 조사 결과 요약이며, 원본 참조만 표시합니다.</p></div>
                 <div className="divide-y divide-white/7">
                   {allEvidence.map((item) => <div key={`${item.id}-${item.sequence}`} className="p-5">
-                    <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-cyan-300">E{item.sequence}</span><Badge variant="outline" className="border-white/10 text-slate-300">{item.layer}</Badge><Badge variant="outline" className={item.stance === "supporting" ? "border-emerald-400/20 text-emerald-300" : "border-amber-400/20 text-amber-300"}>{item.stance === "supporting" ? "지지" : "반박"}</Badge><span className="ml-auto font-mono text-xs text-muted-foreground">{formatDate(item.time)}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-cyan-300">E{item.sequence}</span><Badge variant="outline" className="border-white/10 text-slate-300">{item.layer}</Badge><Badge variant="outline" className={item.stance === "supporting" ? "border-emerald-400/20 text-emerald-300" : "border-amber-400/20 text-amber-300"}>{item.stance === "supporting" ? "지지" : "반박"}</Badge><span className="ml-auto font-mono text-xs text-muted-foreground">{formatDate(item.time, timezone)}</span></div>
                     <p className="mt-3 text-sm leading-6 text-slate-200">{item.description}</p>
                     <details className="mt-3 rounded-lg border border-white/8 bg-black/15 px-3 py-2"><summary className="cursor-pointer text-xs text-muted-foreground">원본 참조 {item.rawRefs.length}개</summary><div className="mt-2 flex flex-wrap gap-2">{item.rawRefs.length ? item.rawRefs.map((ref) => <code key={ref} className="rounded bg-white/5 px-2 py-1 text-xs text-cyan-200">{ref}</code>) : <span className="text-xs text-amber-300">참조 없음</span>}</div></details>
                   </div>)}
@@ -639,6 +675,7 @@ export default function Home() {
   const [view, setView] = useState<View>("overview");
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [timezone, setTimezone] = useState<Timezone>("UTC");
   const active = navigation.find((item) => item.id === view) ?? navigation[0];
 
   const openIncident = (incident: Incident) => {
@@ -654,7 +691,7 @@ export default function Home() {
           <div><p className="text-xl font-black tracking-[0.18em]">SSOC</p><p className="text-xs text-muted-foreground">Security Signal Operations</p></div>
         </div>
         <nav className="space-y-1 p-4" aria-label="주요 메뉴">
-          {navigation.map((item) => { const Icon = item.icon; const isActive = item.id === view; return <button key={item.id} onClick={() => setView(item.id)} className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition ${isActive ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-100" : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"}`}><Icon className="size-4"/><span className="flex-1"><span className="block text-sm font-medium">{item.label}</span><span className="mt-0.5 block text-xs opacity-65">{item.description}</span></span>{isActive && <span className="size-1.5 rounded-full bg-cyan-300"/>}</button>; })}
+          {navigation.map((item) => { const Icon = item.icon; const isActive = item.id === view; return <button key={item.id} onClick={() => setView(item.id)} className={`relative flex w-full items-center gap-3 border-0 px-3 py-3 text-left transition ${isActive ? "text-cyan-200 before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-cyan-300" : "text-muted-foreground hover:text-foreground"}`}><Icon className="size-4"/><span className="flex-1"><span className="block text-sm font-medium">{item.label}</span><span className="mt-0.5 block text-xs opacity-65">{item.description}</span></span></button>; })}
         </nav>
         <div className="mt-auto border-t border-border p-4">
           <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3"><p className="flex items-center gap-2 text-xs font-semibold text-amber-300"><CircleDot className="size-3.5"/> DEMO DATA</p><p className="mt-1 text-xs leading-5 text-muted-foreground">000/results의 샘플 조사 결과를 표시합니다.</p></div>
@@ -665,20 +702,20 @@ export default function Home() {
         <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur-xl">
           <div className="flex h-20 items-center justify-between gap-4 px-5 sm:px-8">
             <div className="flex min-w-0 items-center gap-3"><div className="grid size-9 place-items-center rounded-lg border border-cyan-400/20 bg-cyan-400/8 text-cyan-300 lg:hidden"><Shield className="size-4"/></div><div><p className="truncate text-sm text-muted-foreground">{active.description}</p><h1 className="truncate text-xl font-bold tracking-tight">{active.label}</h1></div></div>
-            <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-2 text-xs text-emerald-300 sm:flex"><span className="size-2 rounded-full bg-emerald-400"/> 조사 결과 {incidents.length}건 연결</div><div className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-2 font-mono text-[0.7rem] text-muted-foreground">UTC</div></div>
+            <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-2 text-xs text-emerald-300 sm:flex"><span className="size-2 rounded-full bg-emerald-400"/> 조사 결과 {incidents.length}건 연결</div><div className="flex items-center rounded-lg border border-white/10 bg-black/20 p-1" aria-label="시간대 선택">{(["UTC", "KST"] as const).map((zone) => <button type="button" key={zone} onClick={() => setTimezone(zone)} aria-pressed={timezone === zone} className={`min-w-12 rounded-md px-3 py-2 font-mono text-xs font-semibold transition ${timezone === zone ? "bg-cyan-400 text-[#041112]" : "text-muted-foreground hover:text-foreground"}`}>{zone}</button>)}</div></div>
           </div>
           <nav className="flex overflow-x-auto border-t border-white/6 px-3 lg:hidden" aria-label="모바일 메뉴">{navigation.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setView(item.id)} className={`flex min-w-max items-center gap-2 border-b-2 px-3 py-3 text-sm ${view === item.id ? "border-cyan-300 text-cyan-200" : "border-transparent text-muted-foreground"}`}><Icon className="size-4"/>{item.label}</button>; })}</nav>
         </header>
 
         <div className="p-4 sm:p-6 2xl:p-8">
-          {view === "overview" && <Overview incidents={incidents} onOpenIncident={openIncident} />}
-          {view === "incidents" && <IncidentList incidents={incidents} onOpenIncident={openIncident} />}
+          {view === "overview" && <Overview incidents={incidents} onOpenIncident={openIncident} timezone={timezone} />}
+          {view === "incidents" && <IncidentList incidents={incidents} onOpenIncident={openIncident} timezone={timezone} />}
           {view === "operations" && <Operations incidents={incidents} />}
           {view === "pipeline" && <Pipeline />}
         </div>
       </section>
 
-      <IncidentDetail incident={selectedIncident} open={detailOpen} onOpenChange={setDetailOpen} />
+      <IncidentDetail incident={selectedIncident} open={detailOpen} onOpenChange={setDetailOpen} timezone={timezone} />
     </main>
   );
 }
