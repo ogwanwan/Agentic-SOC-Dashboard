@@ -22,23 +22,43 @@ SSOC(Security SOC)는 로컬 환경에서 보안 로그 분석 파이프라인�
 
 동기화 과정에서 원본 파일의 절대 경로는 노출하지 않으며, 화면에 필요한 사건 정보만 정규화합니다.
 
-## 실행 방법
+## 설치와 실행
 
-Node.js 22.13 이상과 pnpm이 필요합니다.
+Python 3.10 이상을 사용합니다. Node.js와 pnpm이 설치되어 있지 않으면 첫 실행 때 프로젝트 내부의 `.ssoc-runtime/`에 전용 버전을 자동으로 준비하므로, 시스템 전역에 별도로 설치할 필요가 없습니다.
 
 ```bash
-pnpm install
-pnpm run sync:data
-pnpm run dev
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python ssoc.py
 ```
 
-기본 개발 서버는 `http://localhost:5173`에서 실행됩니다.
+Windows PowerShell에서는 다음 명령으로 가상환경을 활성화합니다.
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python ssoc.py
+```
+
+기본 개발 서버는 `http://localhost:5173`에서 실행됩니다. 첫 실행은 전용 실행 도구와 프론트엔드 패키지를 준비하므로 인터넷 연결이 필요하며, 이후에는 저장된 도구와 캐시를 재사용합니다.
+
+### 실행 명령
+
+```bash
+python ssoc.py install  # 실행 도구, 패키지, 조사 결과 데이터 준비
+python ssoc.py sync     # 조사 결과 JSON만 다시 동기화
+python ssoc.py run      # 데이터 동기화 후 개발 서버 실행
+python ssoc.py build    # 데이터 동기화 후 배포용 빌드 생성
+```
+
+`python ssoc.py`는 `python ssoc.py run`과 같습니다.
 
 배포용 빌드는 다음과 같이 검증합니다.
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm run build
+python ssoc.py build
 ```
 
 ## 주요 디렉터리
@@ -47,6 +67,8 @@ pnpm run build
 app/                            화면과 전역 스타일
 data/incidents.generated.json  변환된 조사 결과
 scripts/sync-results.mjs        조사 결과 동기화 스크립트
+ssoc.py                         Python 설치·실행 진입점
+requirements.txt                Python 가상환경 설치 명세
 public/                         파비콘 등 정적 자산
 .openai/hosting.json            Sites 배포 설정
 ```

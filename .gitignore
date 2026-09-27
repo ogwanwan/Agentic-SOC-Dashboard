@@ -31,6 +31,12 @@ yarn-error.log*
 # 환경 변수 파일(필요하면 명시적으로 추적 가능)
 .env*
 
+# Python 가상환경과 SSOC 전용 실행 도구
+/.venv/
+/.ssoc-runtime/
+__pycache__/
+*.py[cod]
+
 # Vercel
 .vercel
 
