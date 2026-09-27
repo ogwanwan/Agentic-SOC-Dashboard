@@ -110,7 +110,7 @@ button { cursor: pointer; }
 .attack-node__icon { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: .5rem; background: color-mix(in srgb, currentColor 16%, transparent); }
 .attack-node small, .attack-node strong, .attack-node em { display: block; }
 .attack-node small { color: var(--muted-foreground); font-size: .7rem; }
-.attack-node strong { max-width: 150px; overflow: hidden; margin-top: .3rem; color: var(--foreground); font: 600 .78rem/1.35 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.attack-node strong { display: -webkit-box; max-width: 160px; overflow: hidden; margin-top: .3rem; color: var(--foreground); font: 600 .78rem/1.35 var(--font-mono); white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .attack-node em { display: -webkit-box; overflow: hidden; margin-top: .35rem; color: var(--muted-foreground); font: normal .7rem/1.45 var(--font-sans); -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .attack-node--rose { color: #ff5e68; border-color: rgba(255,94,104,.38); }.attack-node--amber { color: #f4b84a; border-color: rgba(244,184,74,.38); }.attack-node--cyan { color: #29d3c2; border-color: rgba(41,211,194,.38); }.attack-node--violet { color: #9b87f5; border-color: rgba(155,135,245,.38); }
 .attack-edge { position: relative; width: 3rem; flex: 0 0 3rem; text-align: center; }

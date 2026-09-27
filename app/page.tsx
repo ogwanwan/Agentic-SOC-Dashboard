@@ -258,9 +258,14 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
             {timelineData.map((item) => (
               <div key={item.stamp} className="flex h-full min-w-16 flex-1 flex-col justify-end">
                 <div className="flex h-[13rem] items-end justify-center gap-1.5" title={`${item.label} · 위협 ${item.threat}, 비위협 ${item.benign}, 불충분 ${item.inconclusive}`}>
-                  <span className="w-3 rounded-t bg-rose-400/90 transition-all" style={{ height: `${Math.max(item.threat ? 7 : 0, (item.threat / timelineMax) * 100)}%` }} />
-                  <span className="w-3 rounded-t bg-emerald-400/80 transition-all" style={{ height: `${Math.max(item.benign ? 7 : 0, (item.benign / timelineMax) * 100)}%` }} />
-                  <span className="w-3 rounded-t bg-amber-400/80 transition-all" style={{ height: `${Math.max(item.inconclusive ? 7 : 0, (item.inconclusive / timelineMax) * 100)}%` }} />
+                  {[
+                    { value: item.threat, color: "bg-rose-400/90" },
+                    { value: item.benign, color: "bg-emerald-400/80" },
+                    { value: item.inconclusive, color: "bg-amber-400/80" },
+                  ].map((bar, index) => {
+                    const height = Math.max(bar.value ? 7 : 0, (bar.value / timelineMax) * 100);
+                    return <div key={index} className="relative h-full w-4"><span className="absolute left-1/2 -translate-x-1/2 font-mono text-[0.68rem] font-semibold text-slate-300" style={{ bottom: `calc(${height}% + 0.3rem)` }}>{bar.value}</span><i className={`absolute inset-x-0 bottom-0 rounded-t transition-all ${bar.color}`} style={{ height: `${height}%` }} /></div>;
+                  })}
                 </div>
                 <p className="mt-3 truncate text-center font-mono text-[0.65rem] text-slate-500">{item.label}</p>
               </div>
@@ -410,25 +415,30 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
   );
 }
 
-function IncidentGraph({ incident }: { incident: Incident }) {
+function IncidentGraph({ incident, timezone }: { incident: Incident; timezone: Timezone }) {
   const [active, setActive] = useState(0);
-  const primaryEvidence = incident.evidence.find((item) => item.layer !== "network") ?? incident.evidence[0];
-  const nodes = [
-    { label: "출발지", title: incident.srcIp || "출발지 미확인", detail: "외부 접근 주체", icon: Network, color: "rose" },
-    { label: "탐지 행위", title: incident.triggerDescription, detail: incident.detectionSource, icon: ShieldAlert, color: "amber" },
-    { label: "대상 시스템", title: incident.host, detail: incident.affectedSystems.join(", ") || "영향 범위 확인 중", icon: Server, color: "cyan" },
-    { label: "관측 증거", title: primaryEvidence?.eventType ?? "증거 없음", detail: primaryEvidence?.description ?? "원본 로그 확인 필요", icon: Fingerprint, color: "violet" },
-  ];
+  const nodes = useMemo(() => {
+    const sourceNodes = incident.srcIp ? [{ id: `source-${incident.srcIp}`, label: "출발지", title: incident.srcIp, detail: incident.detectionSource || "외부 접근 주체", icon: Network, color: "rose" }] : [];
+    const eventNodes = incident.timeline.length
+      ? incident.timeline.map((item, index) => ({ id: `timeline-${index}-${item.time}`, label: `이벤트 ${index + 1}`, title: item.event, detail: [item.source, formatDate(item.time, timezone)].filter(Boolean).join(" · "), icon: Activity, color: index % 2 ? "cyan" : "amber" }))
+      : [...incident.evidence, ...incident.contradictingEvidence]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((item) => ({ id: `evidence-${item.id}`, label: item.stance === "supporting" ? "지지 증거" : "반박 증거", title: item.description, detail: `${item.layer} · ${item.eventType}`, icon: Fingerprint, color: item.stance === "supporting" ? "cyan" : "amber" }));
+    const systems = incident.affectedSystems.length ? incident.affectedSystems : incident.host ? [incident.host] : [];
+    const targetNodes = [...new Set(systems)].map((system) => ({ id: `target-${system}`, label: "영향 시스템", title: system, detail: incident.title, icon: Server, color: "violet" }));
+    return [...sourceNodes, ...eventNodes, ...targetNodes];
+  }, [incident, timezone]);
   const selected = nodes[active];
+  if (!selected) return null;
   const SelectedIcon = selected.icon;
   return <section className="attack-graph signal-card p-5">
     <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Attack path graph</p><h3 className="mt-2 font-semibold">사건 연결 관계</h3></div><span className="font-mono text-xs text-muted-foreground">Nodes {nodes.length} · Edges {nodes.length - 1}</span></div>
     <div className="mt-5 overflow-x-auto pb-3"><div className="flex min-w-[760px] items-center">
-      {nodes.map((node, index) => { const Icon = node.icon; return <div key={node.label} className="flex min-w-0 flex-1 items-center">
+      {nodes.map((node, index) => { const Icon = node.icon; return <div key={node.id} className="flex min-w-0 flex-1 items-center">
         <button type="button" onClick={() => setActive(index)} className={`attack-node attack-node--${node.color} ${active === index ? "is-active" : ""}`} aria-pressed={active === index}>
           <span className="attack-node__icon"><Icon className="size-5" /></span><span className="text-left"><small>{node.label}</small><strong>{node.title}</strong><em>{node.detail}</em></span>
         </button>
-        {index < nodes.length - 1 && <div className="attack-edge"><span>{index === 0 ? "접속" : index === 1 ? "영향" : "관측"}</span><i /></div>}
+        {index < nodes.length - 1 && <div className="attack-edge"><span>{nodes[index + 1].label}</span><i /></div>}
       </div>; })}
     </div></div>
     <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
@@ -464,7 +474,7 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
             <TabsContent value="summary" className="space-y-5">
-              <IncidentGraph incident={incident} />
+              <IncidentGraph incident={incident} timezone={timezone} />
               <section className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr]">
                 <article className="signal-card p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">Provisional conclusion</p>
