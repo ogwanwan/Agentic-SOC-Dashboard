@@ -1,0 +1,175 @@
+{
+  "incident_id": "INC-SSH-001",
+  "investigation_id": "INV-INC-SSH-001-20260923-001",
+  "investigation_status": "COMPLETE",
+  "timestamp": "2026-09-23T07:19:02Z",
+  "initial_seed": {
+    "incident_id": "INC-SSH-001",
+    "detection_source": "llm_triage",
+    "trigger_time": "2026-09-22T13:26:12.000Z",
+    "window": [
+      "2026-09-22T13:26:12.000Z",
+      "2026-09-22T13:26:13.000Z"
+    ],
+    "evidence_refs": [
+      "sample_auth.log:471",
+      "sample_auth.log:472"
+    ],
+    "trigger_description": "root 계정 대상 SSH 패스워드 로그인 실패 발생",
+    "confidence_initial": 0.5,
+    "severity_hint": "MEDIUM",
+    "priority": 1,
+    "host": "ip-10-0-7-236",
+    "src_ip": "171.235.42.109",
+    "reasoning": "외부 IP에서 root 계정으로 SSH 인증 실패 및 연결 종료 로그가 확인되어 무차별 대입 공격 가능성이 있습니다."
+  },
+  "raw_refs": [
+    "sample_auth.log:471",
+    "sample_auth.log:472",
+    "sample_auth.log:470"
+  ],
+  "raw_ref_locations": {
+    "sample_auth.log:470": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_auth.log:470"
+    ],
+    "sample_auth.log:471": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_auth.log:471"
+    ],
+    "sample_auth.log:472": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_auth.log:472"
+    ]
+  },
+  "provenance": {
+    "status": "incomplete",
+    "raw_ref_count": 3,
+    "seed_raw_refs": [
+      "sample_auth.log:471",
+      "sample_auth.log:472"
+    ],
+    "evidence_without_raw_refs": [
+      "EVID-002"
+    ],
+    "ambiguous_raw_refs": {},
+    "issues": []
+  },
+  "hypothesis": {
+    "title": "외부 IP에 의한 SSH 루트 계정 무차별 대입 공격",
+    "description": "외부 IP(171.235.42.109)에서 root 계정을 대상으로 SSH 패스워드 로그인을 시도하다 실패한 정황이 있습니다.",
+    "confidence_initial": 0.5
+  },
+  "evidence_chain": [
+    {
+      "sequence": 1,
+      "time": "2026-09-22T13:26:12.000Z",
+      "layer": "auth",
+      "event_type": "ssh_failed",
+      "description": "외부 IP 171.235.42.109에서 root 계정으로 SSH 패스워드 로그인 시도가 실패한 3건의 로그가 확인됨.",
+      "evidence_id": "EVID-001",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.15,
+      "source_log": "sample_auth.log",
+      "raw_ref": "sample_auth.log:470",
+      "raw_refs": [
+        "sample_auth.log:470",
+        "sample_auth.log:471",
+        "sample_auth.log:472"
+      ]
+    }
+  ],
+  "contradicting_evidence": [
+    {
+      "sequence": 2,
+      "layer": "network",
+      "evidence_id": "EVID-002",
+      "description": "외부 IP 171.235.42.109와 대상 호스트 간의 네트워크 로그 조회 결과 추가적인 통신 기록이 없음.",
+      "confidence_reduction": 0.0,
+      "explanation": "외부 IP 171.235.42.109와 대상 호스트 간의 네트워크 로그 조회 결과 추가적인 통신 기록이 없음.",
+      "source_log": "fetch_network_log",
+      "raw_ref": null,
+      "raw_refs": []
+    }
+  ],
+  "attack_timeline": [
+    {
+      "time": "2026-09-22T13:26:12.000Z",
+      "event": "외부 IP 171.235.42.109에서 root 계정 대상 SSH 패스워드 인증 실패 (3건)",
+      "source": "171.235.42.109"
+    }
+  ],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.5,
+      "reason": "root 계정 대상 SSH 패스워드 로그인 실패 발생"
+    },
+    {
+      "stage": "after_tool_1",
+      "confidence": 0.65,
+      "reason": "외부 IP 171.235.42.109에서 root 계정으로 SSH 패스워드 로그인 시도가 실패한 3건의 로그가 확인됨."
+    },
+    {
+      "stage": "after_tool_2",
+      "confidence": 0.65,
+      "reason": "외부 IP 171.235.42.109와 대상 호스트 간의 네트워크 로그 조회 결과 추가적인 통신 기록이 없음."
+    }
+  ],
+  "final_verdict": {
+    "verdict": "INCONCLUSIVE",
+    "confidence": 0.55,
+    "severity": "LOW",
+    "attack_type": "SSH Brute Force Attempt (Unconfirmed)",
+    "affected_systems": [
+      "ip-10-0-7-236"
+    ],
+    "summary": "외부 IP에서 SSH 패스워드 인증 실패가 확인되었으나 추가적인 네트워크 통신이나 공격 행위로 이어지지 않아 단발성 시도로 판단됩니다.",
+    "reasoning": "auth 로그를 통해 외부 IP의 SSH 인증 실패 3건을 확인하였으나 로그인이 성공하지 않았고, network 로그에서 후속 통신이 전혀 관찰되지 않아 실제 침해로 발전하지 않은 단순 인증 실패 시도로 평가됩니다. 다만 인증 시도 건수가 적고 추가 증거가 제한적이므로 확정적인 위협으로 판단하기 어렵습니다."
+  },
+  "tools_called": [
+    {
+      "sequence": 1,
+      "tool_name": "fetch_auth_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-22T12:26:12.000Z",
+        "end_time": "2026-09-22T14:26:12.000Z",
+        "src_ip": "171.235.42.109"
+      },
+      "result_count": 3,
+      "result_summary": "ip-10-0-7-236 auth: 총 3건 중 3건 반환.",
+      "raw_refs": [
+        "sample_auth.log:470",
+        "sample_auth.log:471",
+        "sample_auth.log:472"
+      ],
+      "queried_layers": []
+    },
+    {
+      "sequence": 2,
+      "tool_name": "fetch_network_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-22T12:26:12.000Z",
+        "end_time": "2026-09-22T14:26:12.000Z",
+        "src_ip": "171.235.42.109"
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236 network: 총 0건 중 0건 반환.",
+      "raw_refs": [],
+      "queried_layers": []
+    }
+  ],
+  "statistics": {
+    "tool_calls_count": 2,
+    "tool_calls_max": 8,
+    "confidence_increase": 0.15,
+    "evidence_count": 1,
+    "contradicting_evidence_count": 1,
+    "termination_reason": "no_more_evidence"
+  },
+  "remaining_unknowns": [],
+  "investigation_notes": [
+    "증거 2: 유효한 raw_ref가 없어 신뢰도 기여를 제외했습니다."
+  ]
+}

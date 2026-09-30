@@ -1,0 +1,1093 @@
+{
+  "mode": "offline_scripted_llm",
+  "seed_input": [
+    {
+      "timestamp": "2026-09-21T00:00:10Z",
+      "layer": "web",
+      "raw_ref": "web.txt:1",
+      "src_ip": "192.0.2.10",
+      "pid": null,
+      "ppid": null,
+      "raw_refs": [
+        "web.txt:1"
+      ],
+      "request_id": "r1",
+      "method": "POST",
+      "path": "/login",
+      "status": 200,
+      "scheme": "https",
+      "host": "example.test",
+      "user_agent": "test-agent",
+      "referer": null,
+      "bytes": 100,
+      "duration_us": 1000,
+      "_source_type": "web"
+    },
+    {
+      "timestamp": "2026-09-21T00:00:20.000Z",
+      "layer": "auth",
+      "raw_ref": "auth.txt:1",
+      "src_ip": "192.0.2.10",
+      "pid": 100,
+      "ppid": null,
+      "raw_refs": [
+        "auth.txt:1"
+      ],
+      "host": "web-01",
+      "program": "sshd",
+      "event": "ssh_accepted",
+      "result": "success",
+      "user": "demo",
+      "src_user": null,
+      "uid": null,
+      "src_uid": null,
+      "gid": null,
+      "tty": null,
+      "session_type": null,
+      "pwd": null,
+      "command": null,
+      "method": "password",
+      "invalid_user": false,
+      "key_type": null,
+      "key_fp": null,
+      "rport": 4000,
+      "pam_service": null,
+      "reason": null,
+      "group": null,
+      "shell": null,
+      "home": null,
+      "changed_attr": null,
+      "old_value": null,
+      "new_value": null,
+      "repeat_count": null,
+      "message": "Accepted password for demo from 192.0.2.10 port 4000 ssh2",
+      "_source_type": "auth"
+    },
+    {
+      "timestamp": "2026-09-21T00:00:30.100Z",
+      "layer": "system",
+      "raw_ref": "audit.txt:1",
+      "src_ip": null,
+      "pid": 200,
+      "ppid": 100,
+      "raw_refs": [
+        "audit.txt:1",
+        "audit.txt:2"
+      ],
+      "serial": 42,
+      "record_types": [
+        "EXECVE",
+        "SYSCALL"
+      ],
+      "syscall": "execve",
+      "key": null,
+      "exe": "/usr/bin/id",
+      "comm": "id",
+      "user": null,
+      "cwd": null,
+      "exec_args": "id",
+      "argv": [
+        "id"
+      ],
+      "proctitle": null,
+      "path": null,
+      "paths": null,
+      "success": null,
+      "exit": null,
+      "uid": 1000,
+      "euid": null,
+      "auid": null,
+      "ses": null,
+      "tty": null,
+      "session_type": "non_interactive",
+      "arch": null,
+      "_source_type": "audit"
+    },
+    {
+      "timestamp": "2026-09-21T00:00:40.000000Z",
+      "layer": "network",
+      "raw_ref": "network.jsonl:1",
+      "src_ip": null,
+      "pid": null,
+      "ppid": null,
+      "raw_refs": [
+        "network.jsonl:1"
+      ],
+      "event_type": "http",
+      "signature": null,
+      "signature_id": null,
+      "category": null,
+      "severity": null,
+      "action": null,
+      "flow_id": null,
+      "community_id": null,
+      "in_iface": null,
+      "tx_id": null,
+      "method": null,
+      "url": null,
+      "url_path": null,
+      "url_query": null,
+      "status": null,
+      "http_host": null,
+      "http_user_agent": null,
+      "http_version": null,
+      "dest_ip": "192.0.2.20",
+      "dest_port": 443,
+      "transport_src_ip": "192.0.2.10",
+      "transport_src_port": 4000,
+      "transport_dest_port": 443,
+      "protocol": "TCP",
+      "xff_raw": null,
+      "xff_ips": [],
+      "xff_resolution": "missing",
+      "xff_status": "missing",
+      "sensor_id": "suricata_ec2",
+      "_source_type": "network"
+    }
+  ],
+  "tool_observations": [
+    {
+      "tool_name": "fetch_web_log",
+      "args": {
+        "host": "web-01",
+        "start_time": "2026-09-21T00:00:00Z",
+        "end_time": "2026-09-21T00:01:00Z"
+      },
+      "result": {
+        "count": 1,
+        "summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 web 요청 총 1건 중 0~0번째 1건 반환. (더 없음, method/path/status/duration_us까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 요청 1건(실제 기록 시각 2026-09-21T00:00:10Z~2026-09-21T00:00:10Z), 출발지 IP 1개, 메서드별: POST 1건, 상태코드 계열별: 2xx 1건, 서로 다른 경로 1개, 상위 경로: /login 1건, User-Agent 상위: test-agent 1건 [원칙 9 기준] 인증·원격호출 엔드포인트 POST 1회 → 인증 대입 기준(POST 10회 이상) 미충족, 서로 다른 경로 1개·4xx 0건 → 경로 스캔 기준(경로 20개 이상이고 4xx 과반) 미충족. (응답 코드·User-Agent와 무관하게 이 값으로 판정)",
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:10Z",
+            "layer": "web",
+            "raw_ref": "web.txt:1",
+            "src_ip": "192.0.2.10",
+            "pid": null,
+            "ppid": null,
+            "raw_refs": [
+              "web.txt:1"
+            ],
+            "raw_ref_locations": {
+              "web.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/web.txt:1"
+              ]
+            },
+            "request_id": "r1",
+            "method": "POST",
+            "path": "/login",
+            "status": 200,
+            "scheme": "https",
+            "host": "example.test",
+            "user_agent": "test-agent",
+            "referer": null,
+            "bytes": 100,
+            "duration_us": 1000
+          }
+        ],
+        "total_matched": 1,
+        "has_more": false,
+        "next_offset": null,
+        "scanned_objects": 1,
+        "invalid_timestamps": 0,
+        "window_total": 1,
+        "rule_checks": [
+          {
+            "rule": "principle_9",
+            "src_ip": "192.0.2.10",
+            "auth_posts": 1,
+            "auth_bruteforce": false,
+            "distinct_paths": 1,
+            "four_xx": 0,
+            "path_scan": false
+          }
+        ]
+      }
+    },
+    {
+      "tool_name": "fetch_auth_log",
+      "args": {
+        "host": "web-01",
+        "start_time": "2026-09-21T00:00:00Z",
+        "end_time": "2026-09-21T00:01:00Z"
+      },
+      "result": {
+        "count": 1,
+        "summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 인증 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, event/result까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 로그인 실패 0회(ssh_failed+ssh_invalid_user 기준), 실패 대상 계정 0개(-), 로그인 성공 1회. event별: ssh_accepted 1건",
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:20.000Z",
+            "layer": "auth",
+            "raw_ref": "auth.txt:1",
+            "src_ip": "192.0.2.10",
+            "pid": 100,
+            "ppid": null,
+            "raw_refs": [
+              "auth.txt:1"
+            ],
+            "raw_ref_locations": {
+              "auth.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/auth.txt:1"
+              ]
+            },
+            "host": "web-01",
+            "program": "sshd",
+            "event": "ssh_accepted",
+            "result": "success",
+            "user": "demo",
+            "src_user": null,
+            "uid": null,
+            "src_uid": null,
+            "gid": null,
+            "tty": null,
+            "session_type": null,
+            "pwd": null,
+            "command": null,
+            "method": "password",
+            "invalid_user": false,
+            "key_type": null,
+            "key_fp": null,
+            "rport": 4000,
+            "pam_service": null,
+            "reason": null,
+            "group": null,
+            "shell": null,
+            "home": null,
+            "changed_attr": null,
+            "old_value": null,
+            "new_value": null,
+            "repeat_count": null,
+            "message": "Accepted password for demo from 192.0.2.10 port 4000 ssh2"
+          }
+        ],
+        "total_matched": 1,
+        "has_more": false,
+        "next_offset": null,
+        "scanned_objects": 1,
+        "invalid_timestamps": 0,
+        "window_total": 1
+      }
+    },
+    {
+      "tool_name": "fetch_audit_log",
+      "args": {
+        "host": "web-01",
+        "start_time": "2026-09-21T00:00:00Z",
+        "end_time": "2026-09-21T00:01:00Z"
+      },
+      "result": {
+        "count": 1,
+        "summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 audit 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-21T00:00:30.100Z~2026-09-21T00:00:30.100Z), 실행 계정별: - 1건, 명령별: id 1건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 0건 중 셸·의심 명령 0건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 0건. (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오)",
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:30.100Z",
+            "layer": "system",
+            "raw_ref": "audit.txt:1",
+            "src_ip": null,
+            "pid": 200,
+            "ppid": 100,
+            "raw_refs": [
+              "audit.txt:1",
+              "audit.txt:2"
+            ],
+            "raw_ref_locations": {
+              "audit.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/audit.txt:1"
+              ],
+              "audit.txt:2": [
+                "D:/Projects/whs4_proj/000/examples/cd/audit.txt:2"
+              ]
+            },
+            "serial": 42,
+            "record_types": [
+              "EXECVE",
+              "SYSCALL"
+            ],
+            "syscall": "execve",
+            "key": null,
+            "exe": "/usr/bin/id",
+            "comm": "id",
+            "user": null,
+            "cwd": null,
+            "exec_args": "id",
+            "argv": [
+              "id"
+            ],
+            "proctitle": null,
+            "path": null,
+            "paths": null,
+            "success": null,
+            "exit": null,
+            "uid": 1000,
+            "euid": null,
+            "auid": null,
+            "ses": null,
+            "tty": null,
+            "session_type": "non_interactive",
+            "arch": null,
+            "raw_lines": [
+              1,
+              2
+            ]
+          }
+        ],
+        "total_matched": 1,
+        "has_more": false,
+        "next_offset": null,
+        "scanned_objects": 1,
+        "invalid_timestamps": 0,
+        "window_total": 1,
+        "rule_checks": [
+          {
+            "rule": "audit_post_exploitation",
+            "web_server_exec": 0,
+            "web_server_suspicious": 0,
+            "suspicious": 0,
+            "examples": [],
+            "external_ips": []
+          }
+        ]
+      }
+    },
+    {
+      "tool_name": "fetch_network_log",
+      "args": {
+        "host": "web-01",
+        "start_time": "2026-09-21T00:00:00Z",
+        "end_time": "2026-09-21T00:01:00Z"
+      },
+      "result": {
+        "count": 1,
+        "summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 네트워크 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, http 이벤트는 url/method/status/xff까지 포함, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-21T00:00:40.000000Z~2026-09-21T00:00:40.000000Z), 종류별: http 1건, alert signature: -, http 상태코드 계열: - 1건, http 상위 경로: - 1건, 목적지 상위: 192.0.2.20:443 1건",
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:40.000000Z",
+            "layer": "network",
+            "raw_ref": "network.jsonl:1",
+            "src_ip": null,
+            "pid": null,
+            "ppid": null,
+            "raw_refs": [
+              "network.jsonl:1"
+            ],
+            "raw_ref_locations": {
+              "network.jsonl:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/network.jsonl:1"
+              ]
+            },
+            "event_type": "http",
+            "signature": null,
+            "signature_id": null,
+            "category": null,
+            "severity": null,
+            "action": null,
+            "flow_id": null,
+            "community_id": null,
+            "in_iface": null,
+            "tx_id": null,
+            "method": null,
+            "url": null,
+            "url_path": null,
+            "url_query": null,
+            "status": null,
+            "http_host": null,
+            "http_user_agent": null,
+            "http_version": null,
+            "dest_ip": "192.0.2.20",
+            "dest_port": 443,
+            "transport_src_ip": "192.0.2.10",
+            "transport_src_port": 4000,
+            "transport_dest_port": 443,
+            "protocol": "TCP",
+            "xff_raw": null,
+            "xff_ips": [],
+            "xff_resolution": "missing",
+            "xff_status": "missing",
+            "sensor_id": "suricata_ec2"
+          }
+        ],
+        "total_matched": 1,
+        "has_more": false,
+        "next_offset": null,
+        "scanned_objects": 1,
+        "invalid_timestamps": 0,
+        "window_total": 1
+      }
+    },
+    {
+      "tool_name": "get_process_tree",
+      "args": {
+        "host": "web-01",
+        "start_time": "2026-09-21T00:00:00Z",
+        "end_time": "2026-09-21T00:01:00Z",
+        "pid": 200
+      },
+      "result": {
+        "count": 1,
+        "summary": "pid=200의 조상 체인 추적 완료: /usr/bin/id(200) (상태: partial, 근거: 관측된 audit syscall 기반 — 확정된 프로세스 생성 트리가 아닌 후보임, 1차 탐지팀 공통 정규화 함수 사용)",
+        "records": [
+          {
+            "target_pid": 200,
+            "chain": "/usr/bin/id(200)",
+            "nodes": [
+              {
+                "pid": 200,
+                "ppid": 100,
+                "timestamp": "2026-09-21T00:00:30.100Z",
+                "exe": "/usr/bin/id",
+                "comm": "id",
+                "user": null,
+                "syscall": "execve",
+                "session_type": "non_interactive",
+                "raw_ref": "audit.txt:1",
+                "raw_refs": [
+                  "audit.txt:1",
+                  "audit.txt:2"
+                ],
+                "raw_ref_locations": {
+                  "audit.txt:1": [
+                    "D:/Projects/whs4_proj/000/examples/cd/audit.txt:1"
+                  ],
+                  "audit.txt:2": [
+                    "D:/Projects/whs4_proj/000/examples/cd/audit.txt:2"
+                  ]
+                }
+              }
+            ],
+            "lineage_status": "partial",
+            "stop_reason": "parent_not_observed",
+            "warnings": [
+              "PID_REUSE_NOT_RESOLVED",
+              "관측된 syscall 기반 추정이며 실시간 프로세스 목록이 아님",
+              "PARENT_NOT_OBSERVED_IN_LOG_WINDOW"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tool_name": "fetch_event_logs",
+      "args": {
+        "layers": [
+          "web",
+          "auth",
+          "audit",
+          "network"
+        ],
+        "limit": 2,
+        "offset": 0,
+        "host": "web-01",
+        "event": {
+          "incident_id": "INC-ABCD-DEMO",
+          "host": "web-01",
+          "priority": 1,
+          "window": [
+            "2026-09-21T00:00:00Z",
+            "2026-09-21T00:01:00Z"
+          ],
+          "trigger_time": "2026-09-21T00:00:00Z",
+          "trigger_description": "합성 로그로 A·B·C·D 연결 확인",
+          "confidence_initial": 0.0,
+          "evidence_refs": [
+            "web.txt:1",
+            "auth.txt:1",
+            "audit.txt:1",
+            "network.jsonl:1"
+          ]
+        }
+      },
+      "result": {
+        "count": 2,
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:10Z",
+            "layer": "web",
+            "raw_ref": "web.txt:1",
+            "src_ip": "192.0.2.10",
+            "pid": null,
+            "ppid": null,
+            "raw_refs": [
+              "web.txt:1"
+            ],
+            "raw_ref_locations": {
+              "web.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/web.txt:1"
+              ]
+            },
+            "request_id": "r1",
+            "method": "POST",
+            "path": "/login",
+            "status": 200,
+            "scheme": "https",
+            "host": "example.test",
+            "user_agent": "test-agent",
+            "referer": null,
+            "bytes": 100,
+            "duration_us": 1000
+          },
+          {
+            "timestamp": "2026-09-21T00:00:20.000Z",
+            "layer": "auth",
+            "raw_ref": "auth.txt:1",
+            "src_ip": "192.0.2.10",
+            "pid": 100,
+            "ppid": null,
+            "raw_refs": [
+              "auth.txt:1"
+            ],
+            "raw_ref_locations": {
+              "auth.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/auth.txt:1"
+              ]
+            },
+            "host": "web-01",
+            "program": "sshd",
+            "event": "ssh_accepted",
+            "result": "success",
+            "user": "demo",
+            "src_user": null,
+            "uid": null,
+            "src_uid": null,
+            "gid": null,
+            "tty": null,
+            "session_type": null,
+            "pwd": null,
+            "command": null,
+            "method": "password",
+            "invalid_user": false,
+            "key_type": null,
+            "key_fp": null,
+            "rport": 4000,
+            "pam_service": null,
+            "reason": null,
+            "group": null,
+            "shell": null,
+            "home": null,
+            "changed_attr": null,
+            "old_value": null,
+            "new_value": null,
+            "repeat_count": null,
+            "message": "Accepted password for demo from 192.0.2.10 port 4000 ssh2"
+          }
+        ],
+        "window": [
+          "2026-09-21T00:00:00+00:00",
+          "2026-09-21T00:01:00+00:00"
+        ],
+        "summary": "사건 구간에서 총 4건 중 2건 반환.",
+        "total_matched": 4,
+        "has_more": true,
+        "next_offset": 2,
+        "layer_counts": {
+          "web": 1,
+          "auth": 1,
+          "audit": 1,
+          "network": 1
+        },
+        "errors": {},
+        "partial": false
+      }
+    },
+    {
+      "tool_name": "fetch_event_logs",
+      "args": {
+        "layers": [
+          "web",
+          "auth",
+          "audit",
+          "network"
+        ],
+        "limit": 2,
+        "offset": 2,
+        "host": "web-01",
+        "event": {
+          "incident_id": "INC-ABCD-DEMO",
+          "host": "web-01",
+          "priority": 1,
+          "window": [
+            "2026-09-21T00:00:00Z",
+            "2026-09-21T00:01:00Z"
+          ],
+          "trigger_time": "2026-09-21T00:00:00Z",
+          "trigger_description": "합성 로그로 A·B·C·D 연결 확인",
+          "confidence_initial": 0.0,
+          "evidence_refs": [
+            "web.txt:1",
+            "auth.txt:1",
+            "audit.txt:1",
+            "network.jsonl:1"
+          ]
+        }
+      },
+      "result": {
+        "count": 2,
+        "records": [
+          {
+            "timestamp": "2026-09-21T00:00:30.100Z",
+            "layer": "system",
+            "raw_ref": "audit.txt:1",
+            "src_ip": null,
+            "pid": 200,
+            "ppid": 100,
+            "raw_refs": [
+              "audit.txt:1",
+              "audit.txt:2"
+            ],
+            "raw_ref_locations": {
+              "audit.txt:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/audit.txt:1"
+              ],
+              "audit.txt:2": [
+                "D:/Projects/whs4_proj/000/examples/cd/audit.txt:2"
+              ]
+            },
+            "serial": 42,
+            "record_types": [
+              "EXECVE",
+              "SYSCALL"
+            ],
+            "syscall": "execve",
+            "key": null,
+            "exe": "/usr/bin/id",
+            "comm": "id",
+            "user": null,
+            "cwd": null,
+            "exec_args": "id",
+            "argv": [
+              "id"
+            ],
+            "proctitle": null,
+            "path": null,
+            "paths": null,
+            "success": null,
+            "exit": null,
+            "uid": 1000,
+            "euid": null,
+            "auid": null,
+            "ses": null,
+            "tty": null,
+            "session_type": "non_interactive",
+            "arch": null,
+            "raw_lines": [
+              1,
+              2
+            ]
+          },
+          {
+            "timestamp": "2026-09-21T00:00:40.000000Z",
+            "layer": "network",
+            "raw_ref": "network.jsonl:1",
+            "src_ip": null,
+            "pid": null,
+            "ppid": null,
+            "raw_refs": [
+              "network.jsonl:1"
+            ],
+            "raw_ref_locations": {
+              "network.jsonl:1": [
+                "D:/Projects/whs4_proj/000/examples/cd/network.jsonl:1"
+              ]
+            },
+            "event_type": "http",
+            "signature": null,
+            "signature_id": null,
+            "category": null,
+            "severity": null,
+            "action": null,
+            "flow_id": null,
+            "community_id": null,
+            "in_iface": null,
+            "tx_id": null,
+            "method": null,
+            "url": null,
+            "url_path": null,
+            "url_query": null,
+            "status": null,
+            "http_host": null,
+            "http_user_agent": null,
+            "http_version": null,
+            "dest_ip": "192.0.2.20",
+            "dest_port": 443,
+            "transport_src_ip": "192.0.2.10",
+            "transport_src_port": 4000,
+            "transport_dest_port": 443,
+            "protocol": "TCP",
+            "xff_raw": null,
+            "xff_ips": [],
+            "xff_resolution": "missing",
+            "xff_status": "missing",
+            "sensor_id": "suricata_ec2"
+          }
+        ],
+        "window": [
+          "2026-09-21T00:00:00+00:00",
+          "2026-09-21T00:01:00+00:00"
+        ],
+        "summary": "사건 구간에서 총 4건 중 2건 반환.",
+        "total_matched": 4,
+        "has_more": false,
+        "next_offset": null,
+        "layer_counts": {
+          "web": 1,
+          "auth": 1,
+          "audit": 1,
+          "network": 1
+        },
+        "errors": {},
+        "partial": false
+      }
+    }
+  ],
+  "results": [
+    {
+      "incident_id": "INC-ABCD-DEMO",
+      "investigation_id": "INV-INC-ABCD-DEMO-20260927-001",
+      "investigation_status": "COMPLETE",
+      "timestamp": "2026-09-27T02:37:26Z",
+      "initial_seed": {
+        "incident_id": "INC-ABCD-DEMO",
+        "host": "web-01",
+        "priority": 1,
+        "window": [
+          "2026-09-21T00:00:00Z",
+          "2026-09-21T00:01:00Z"
+        ],
+        "trigger_time": "2026-09-21T00:00:00Z",
+        "trigger_description": "합성 로그로 A·B·C·D 연결 확인",
+        "confidence_initial": 0.0,
+        "evidence_refs": [
+          "web.txt:1",
+          "auth.txt:1",
+          "audit.txt:1",
+          "network.jsonl:1"
+        ]
+      },
+      "raw_refs": [
+        "web.txt:1",
+        "auth.txt:1",
+        "audit.txt:1",
+        "network.jsonl:1",
+        "audit.txt:2"
+      ],
+      "raw_ref_locations": {
+        "web.txt:1": [
+          "D:/Projects/whs4_proj/000/examples/cd/web.txt:1"
+        ],
+        "auth.txt:1": [
+          "D:/Projects/whs4_proj/000/examples/cd/auth.txt:1"
+        ],
+        "audit.txt:1": [
+          "D:/Projects/whs4_proj/000/examples/cd/audit.txt:1"
+        ],
+        "audit.txt:2": [
+          "D:/Projects/whs4_proj/000/examples/cd/audit.txt:2"
+        ],
+        "network.jsonl:1": [
+          "D:/Projects/whs4_proj/000/examples/cd/network.jsonl:1"
+        ]
+      },
+      "provenance": {
+        "status": "passed",
+        "raw_ref_count": 5,
+        "seed_raw_refs": [
+          "web.txt:1",
+          "auth.txt:1",
+          "audit.txt:1",
+          "network.jsonl:1"
+        ],
+        "evidence_without_raw_refs": [],
+        "ambiguous_raw_refs": {},
+        "issues": []
+      },
+      "hypothesis": {
+        "title": null,
+        "description": null,
+        "confidence_initial": 0.0
+      },
+      "evidence_chain": [
+        {
+          "sequence": 1,
+          "time": "2026-09-21T00:00:10Z",
+          "layer": "web",
+          "event_type": "",
+          "description": "web 원본 로그 관측",
+          "evidence_id": "EVID-001",
+          "supporting_hypothesis": [],
+          "confidence_contribution": 0.0,
+          "source_log": "web.txt",
+          "raw_ref": "web.txt:1",
+          "raw_refs": [
+            "web.txt:1"
+          ]
+        },
+        {
+          "sequence": 2,
+          "time": "2026-09-21T00:00:20.000Z",
+          "layer": "auth",
+          "event_type": "",
+          "description": "auth 원본 로그 관측",
+          "evidence_id": "EVID-002",
+          "supporting_hypothesis": [],
+          "confidence_contribution": 0.0,
+          "source_log": "auth.txt",
+          "raw_ref": "auth.txt:1",
+          "raw_refs": [
+            "auth.txt:1"
+          ]
+        },
+        {
+          "sequence": 3,
+          "time": "2026-09-21T00:00:30.100Z",
+          "layer": "system",
+          "event_type": "",
+          "description": "system 원본 로그 관측",
+          "evidence_id": "EVID-003",
+          "supporting_hypothesis": [],
+          "confidence_contribution": 0.0,
+          "source_log": "audit.txt",
+          "raw_ref": "audit.txt:1",
+          "raw_refs": [
+            "audit.txt:1",
+            "audit.txt:2"
+          ]
+        },
+        {
+          "sequence": 4,
+          "time": "2026-09-21T00:00:40.000000Z",
+          "layer": "network",
+          "event_type": "",
+          "description": "network 원본 로그 관측",
+          "evidence_id": "EVID-004",
+          "supporting_hypothesis": [],
+          "confidence_contribution": 0.0,
+          "source_log": "network.jsonl",
+          "raw_ref": "network.jsonl:1",
+          "raw_refs": [
+            "network.jsonl:1"
+          ]
+        }
+      ],
+      "contradicting_evidence": [],
+      "attack_timeline": [],
+      "confidence_progression": [
+        {
+          "stage": "initial",
+          "confidence": 0.0,
+          "reason": "합성 로그로 A·B·C·D 연결 확인"
+        },
+        {
+          "stage": "after_tool_1",
+          "confidence": 0.0,
+          "reason": "web 원본 로그 관측"
+        },
+        {
+          "stage": "after_tool_2",
+          "confidence": 0.0,
+          "reason": "auth 원본 로그 관측"
+        },
+        {
+          "stage": "after_tool_3",
+          "confidence": 0.0,
+          "reason": "system 원본 로그 관측"
+        },
+        {
+          "stage": "after_tool_4",
+          "confidence": 0.0,
+          "reason": "network 원본 로그 관측"
+        }
+      ],
+      "final_verdict": {
+        "verdict": "INCONCLUSIVE",
+        "confidence": 0.0,
+        "severity": "UNKNOWN",
+        "attack_type": "offline_demo",
+        "affected_systems": [
+          "web-01"
+        ],
+        "summary": "A·B·C·D 데이터 흐름을 확인한 데모입니다.",
+        "reasoning": "LLM 판단은 고정 응답이며 실제 공격 여부는 평가하지 않았습니다."
+      },
+      "tools_called": [
+        {
+          "sequence": 1,
+          "tool_name": "fetch_web_log",
+          "input": {
+            "host": "web-01",
+            "start_time": "2026-09-21T00:00:00Z",
+            "end_time": "2026-09-21T00:01:00Z"
+          },
+          "result_count": 1,
+          "result_summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 web 요청 총 1건 중 0~0번째 1건 반환. (더 없음, method/path/status/duration_us까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 요청 1건(실제 기록 시각 2026-09-21T00:00:10Z~2026-09-21T00:00:10Z), 출발지 IP 1개, 메서드별: POST 1건, 상태코드 계열별: 2xx 1건, 서로 다른 경로 1개, 상위 경로: /login 1건, User-Agent 상위: test-agent 1건 [원칙 9 기준] 인증·원격호출 엔드포인트 POST 1회 → 인증 대입 기준(POST 10회 이상) 미충족, 서로 다른 경로 1개·4xx 0건 → 경로 스캔 기준(경로 20개 이상이고 4xx 과반) 미충족. (응답 코드·User-Agent와 무관하게 이 값으로 판정)",
+          "raw_refs": [
+            "web.txt:1"
+          ],
+          "queried_layers": []
+        },
+        {
+          "sequence": 2,
+          "tool_name": "fetch_auth_log",
+          "input": {
+            "host": "web-01",
+            "start_time": "2026-09-21T00:00:00Z",
+            "end_time": "2026-09-21T00:01:00Z"
+          },
+          "result_count": 1,
+          "result_summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 인증 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, event/result까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 로그인 실패 0회(ssh_failed+ssh_invalid_user 기준), 실패 대상 계정 0개(-), 로그인 성공 1회. event별: ssh_accepted 1건",
+          "raw_refs": [
+            "auth.txt:1"
+          ],
+          "queried_layers": []
+        },
+        {
+          "sequence": 3,
+          "tool_name": "fetch_audit_log",
+          "input": {
+            "host": "web-01",
+            "start_time": "2026-09-21T00:00:00Z",
+            "end_time": "2026-09-21T00:01:00Z"
+          },
+          "result_count": 1,
+          "result_summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 audit 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-21T00:00:30.100Z~2026-09-21T00:00:30.100Z), 실행 계정별: - 1건, 명령별: id 1건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 0건 중 셸·의심 명령 0건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 0건. (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오)",
+          "raw_refs": [
+            "audit.txt:1",
+            "audit.txt:2"
+          ],
+          "queried_layers": []
+        },
+        {
+          "sequence": 4,
+          "tool_name": "fetch_network_log",
+          "input": {
+            "host": "web-01",
+            "start_time": "2026-09-21T00:00:00Z",
+            "end_time": "2026-09-21T00:01:00Z"
+          },
+          "result_count": 1,
+          "result_summary": "web-01의 2026-09-21T00:00:00Z~2026-09-21T00:01:00Z 구간에서 조건에 맞는 네트워크 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, http 이벤트는 url/method/status/xff까지 포함, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-21T00:00:40.000000Z~2026-09-21T00:00:40.000000Z), 종류별: http 1건, alert signature: -, http 상태코드 계열: - 1건, http 상위 경로: - 1건, 목적지 상위: 192.0.2.20:443 1건",
+          "raw_refs": [
+            "network.jsonl:1"
+          ],
+          "queried_layers": []
+        },
+        {
+          "sequence": 5,
+          "tool_name": "get_process_tree",
+          "input": {
+            "host": "web-01",
+            "start_time": "2026-09-21T00:00:00Z",
+            "end_time": "2026-09-21T00:01:00Z",
+            "pid": 200
+          },
+          "result_count": 1,
+          "result_summary": "pid=200의 조상 체인 추적 완료: /usr/bin/id(200) (상태: partial, 근거: 관측된 audit syscall 기반 — 확정된 프로세스 생성 트리가 아닌 후보임, 1차 탐지팀 공통 정규화 함수 사용)",
+          "raw_refs": [
+            "audit.txt:1",
+            "audit.txt:2"
+          ],
+          "queried_layers": []
+        },
+        {
+          "sequence": 6,
+          "tool_name": "fetch_event_logs",
+          "input": {
+            "layers": [
+              "web",
+              "auth",
+              "audit",
+              "network"
+            ],
+            "limit": 2,
+            "offset": 0,
+            "host": "web-01",
+            "event": {
+              "incident_id": "INC-ABCD-DEMO",
+              "host": "web-01",
+              "priority": 1,
+              "window": [
+                "2026-09-21T00:00:00Z",
+                "2026-09-21T00:01:00Z"
+              ],
+              "trigger_time": "2026-09-21T00:00:00Z",
+              "trigger_description": "합성 로그로 A·B·C·D 연결 확인",
+              "confidence_initial": 0.0,
+              "evidence_refs": [
+                "web.txt:1",
+                "auth.txt:1",
+                "audit.txt:1",
+                "network.jsonl:1"
+              ]
+            }
+          },
+          "result_count": 2,
+          "result_summary": "사건 구간에서 총 4건 중 2건 반환.",
+          "raw_refs": [
+            "web.txt:1",
+            "auth.txt:1"
+          ],
+          "queried_layers": [
+            "web",
+            "auth",
+            "audit",
+            "network"
+          ]
+        },
+        {
+          "sequence": 7,
+          "tool_name": "fetch_event_logs",
+          "input": {
+            "layers": [
+              "web",
+              "auth",
+              "audit",
+              "network"
+            ],
+            "limit": 2,
+            "offset": 2,
+            "host": "web-01",
+            "event": {
+              "incident_id": "INC-ABCD-DEMO",
+              "host": "web-01",
+              "priority": 1,
+              "window": [
+                "2026-09-21T00:00:00Z",
+                "2026-09-21T00:01:00Z"
+              ],
+              "trigger_time": "2026-09-21T00:00:00Z",
+              "trigger_description": "합성 로그로 A·B·C·D 연결 확인",
+              "confidence_initial": 0.0,
+              "evidence_refs": [
+                "web.txt:1",
+                "auth.txt:1",
+                "audit.txt:1",
+                "network.jsonl:1"
+              ]
+            }
+          },
+          "result_count": 2,
+          "result_summary": "사건 구간에서 총 4건 중 2건 반환.",
+          "raw_refs": [
+            "audit.txt:1",
+            "audit.txt:2",
+            "network.jsonl:1"
+          ],
+          "queried_layers": [
+            "web",
+            "auth",
+            "audit",
+            "network"
+          ]
+        }
+      ],
+      "statistics": {
+        "tool_calls_count": 7,
+        "tool_calls_max": 12,
+        "confidence_increase": 0.0,
+        "investigation_confidence": 0.0,
+        "evidence_count": 4,
+        "contradicting_evidence_count": 0,
+        "termination_reason": "no_more_evidence"
+      },
+      "remaining_unknowns": [],
+      "investigation_notes": []
+    }
+  ]
+}

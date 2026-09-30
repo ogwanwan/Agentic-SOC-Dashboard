@@ -1,0 +1,158 @@
+{
+  "incident_id": "INC-001",
+  "investigation_id": "INV-INC-001-20260918-001",
+  "investigation_status": "COMPLETE",
+  "timestamp": "2026-09-18T09:01:32Z",
+  "initial_seed": {
+    "incident_id": "INC-001",
+    "detection_source": "llm_triage",
+    "trigger_time": "2026-09-14T15:20:47+00:00",
+    "trigger_description": "외부 IP에서 SSH 공개키 로그인 성공 후 /etc/passwd 접근 및 감사 로그 조회 행위 발생",
+    "confidence_initial": 0.65,
+    "severity_hint": "HIGH",
+    "priority": 1,
+    "host": "web-01",
+    "src_ip": "112.148.16.1",
+    "reasoning": "외부 IP(112.148.16.1)를 통한 SSH 로그인 직후 sudo 권한으로 민감한 파일(/etc/passwd)을 반복 조회하고 시스템 감사 로그를 확인한 정황이 포착됨."
+  },
+  "hypothesis": {
+    "title": "외부 IP를 통한 비정상 SSH 로그인 및 민감 파일 접근",
+    "description": "외부 IP(112.148.16.1)에서 SSH 공개키 로그인 성공 후 /etc/passwd 및 /etc/shadow 접근과 감사 로그를 조회하여 시스템 정보를 수집하려 함",
+    "confidence_initial": 0.65
+  },
+  "evidence_chain": [
+    {
+      "sequence": 1,
+      "time": "2026-09-14T15:11:00+00:00",
+      "layer": "auth",
+      "event_type": "ssh_login",
+      "description": "외부 IP 112.148.16.1에서 ubuntu 계정으로 공개키(publickey) 기반 SSH 로그인이 반복 성공한 것을 확인 (인증 실패 없음)",
+      "evidence_id": "EVID-001",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.05,
+      "source_log": "auth.log:413~498"
+    },
+    {
+      "sequence": 2,
+      "time": "2026-09-14T15:20:49.552Z",
+      "layer": "process",
+      "event_type": "sensitive_file_access_and_cmd",
+      "description": "감사 로그 조사 결과, ubuntu 계정 세션에서 sudo를 통해 /etc/passwd 및 /etc/shadow 파일 접근과 감사 로그 조회 명령어('sudo tail -n 500 /var/log/audit/audit.log')가 실행된 것이 확인됨",
+      "evidence_id": "EVID-002",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.18,
+      "source_log": "audit.log"
+    },
+    {
+      "sequence": 3,
+      "time": "2026-09-14T15:20:47+00:00",
+      "layer": "network",
+      "event_type": "network_traffic",
+      "description": "네트워크 로그 확인 결과 112.148.16.1 IP와의 추가적인 외부 통신 이력이 관측되지 않음",
+      "evidence_id": "EVID-003",
+      "supporting_hypothesis": [],
+      "confidence_contribution": 0.0,
+      "source_log": "sample_network.log"
+    }
+  ],
+  "contradicting_evidence": [],
+  "attack_timeline": [
+    {
+      "time": "2026-09-14T15:20:47+00:00",
+      "event": "외부 IP(112.148.16.1)를 통한 ubuntu 계정 SSH 공개키 로그인 성공",
+      "source": "112.148.16.1"
+    },
+    {
+      "time": "2026-09-14T15:22:00+00:00",
+      "event": "sudo를 통한 /etc/passwd, /etc/shadow 파일 접근 및 감사 로그 조회 실행",
+      "source": "ubuntu"
+    }
+  ],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.65,
+      "reason": "외부 IP에서 SSH 공개키 로그인 성공 후 /etc/passwd 접근 및 감사 로그 조회 행위 발생"
+    },
+    {
+      "stage": "after_tool_1",
+      "confidence": 0.7,
+      "reason": "외부 IP 112.148.16.1에서 ubuntu 계정으로 공개키(publickey) 기반 SSH 로그인이 반복 성공한 것을 확인 (인증 실패 없음)"
+    },
+    {
+      "stage": "after_tool_2",
+      "confidence": 0.88,
+      "reason": "감사 로그 조사 결과, ubuntu 계정 세션에서 sudo를 통해 /etc/passwd 및 /etc/shadow 파일 접근과 감사 로그 조회 명령어('sudo tail -n 500 /var/log/audit/audit.log')가 실행된 것이 확인됨"
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 0.88,
+      "reason": "네트워크 로그 확인 결과 112.148.16.1 IP와의 추가적인 외부 통신 이력이 관측되지 않음"
+    }
+  ],
+  "final_verdict": {
+    "verdict": "THREAT_CONFIRMED",
+    "confidence": 0.88,
+    "severity": "HIGH",
+    "attack_type": "Unauthorized Information Gathering / System Reconnaissance",
+    "affected_systems": [
+      "web-01"
+    ],
+    "summary": "외부 IP에서 SSH 공개키 인증으로 로그인한 후 sudo를 통해 민감한 시스템 파일과 감사 로그를 조회하며 정보를 수집한 정황이 확인되었습니다.",
+    "reasoning": "인증 로그를 통해 외부 IP(112.148.16.1)의 SSH 공개키 로그인 성공을 확인하였고, 감사 로그를 통해 해당 세션에서 /etc/passwd, /etc/shadow 및 감사 로그 파일에 접근한 명령어가 실행된 것을 검증하였습니다. 네트워크 로그를 통해 추가 통신이 없음을 확인했으나, 이미 확인된 인증 성공 및 민감 파일 조회 행위를 바탕으로 정보 수집 행위가 성립함을 확인했습니다."
+  },
+  "tools_called": [
+    {
+      "sequence": 1,
+      "tool_name": "fetch_auth_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-14T14:50:47+00:00",
+        "end_time": "2026-09-14T15:50:47+00:00",
+        "src_ip": "112.148.16.1"
+      },
+      "result_count": 8,
+      "result_summary": "web-01의 2026-09-14T14:50:47+00:00~2026-09-14T15:50:47+00:00 구간에서 (local:sample_logs/sample_auth.log) 조건에 맞는 인증 이벤트 총 8건 중 0~7번째 8건 반환. (더 없음, event_type/result/auth_method까지 구조화)"
+    },
+    {
+      "sequence": 2,
+      "tool_name": "fetch_audit_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-14T15:10:00+00:00",
+        "end_time": "2026-09-14T15:30:00+00:00",
+        "user": "ubuntu"
+      },
+      "result_count": 17,
+      "result_summary": "web-01의 2026-09-14T15:10:00+00:00~2026-09-14T15:30:00+00:00 구간에서 (local:sample_logs/sample_audit.log) 조건에 맞는 audit 이벤트 총 17건 중 0~16번째 17건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화)"
+    },
+    {
+      "sequence": 3,
+      "tool_name": "fetch_network_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-14T15:10:00+00:00",
+        "end_time": "2026-09-14T15:30:00+00:00",
+        "src_ip": "112.148.16.1"
+      },
+      "result_count": 0,
+      "result_summary": "web-01의 2026-09-14T15:10:00+00:00~2026-09-14T15:30:00+00:00 구간에서 (local:sample_logs/sample_network.log) 조건에 맞는 네트워크 이벤트 총 0건 중 0건 0건 반환. (더 없음, http 이벤트는 url/http_method/status/xff까지 포함)"
+    }
+  ],
+  "statistics": {
+    "tool_calls_count": 3,
+    "tool_calls_max": 8,
+    "confidence_increase": 0.23,
+    "evidence_count": 3,
+    "contradicting_evidence_count": 0,
+    "termination_reason": "confidence_sufficient"
+  },
+  "remaining_unknowns": [],
+  "investigation_notes": [
+    "신뢰도 임계값 도달 — 다음 사이클에서 종료 여부 재확인 필요"
+  ]
+}

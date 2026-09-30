@@ -1,0 +1,222 @@
+{
+  "incident_id": "INC-960a3db8",
+  "incident_key": null,
+  "incident_snapshot": {
+    "incident_id": "INC-960a3db8",
+    "member_count": 1,
+    "updated_at": null
+  },
+  "investigation_id": "INV-INC-960a3db8-20260928-001",
+  "investigation_status": "COMPLETE",
+  "incomplete_reason": null,
+  "timestamp": "2026-09-28T14:06:12Z",
+  "initial_seed": {
+    "incident_id": "INC-960a3db8",
+    "host": "ip-10-0-7-236",
+    "src_ip": "64.137.37.166",
+    "window": [
+      "2026-09-17T16:36:39.809951Z",
+      "2026-09-17T16:36:39.809951Z"
+    ],
+    "trigger_time": "2026-09-17T16:36:39.809951Z",
+    "evidence_refs": [
+      "sample_access.log:3"
+    ],
+    "trigger_description": "Sensitive / Config File Access (Apache)",
+    "severity_hint": "HIGH",
+    "detection": {
+      "entity": {
+        "type": "src_ip",
+        "value": "64.137.37.166"
+      },
+      "layers": [
+        "web"
+      ],
+      "member_count": 1,
+      "oversized": false,
+      "join_types": {},
+      "rules": [
+        {
+          "rule_name": "apache_sensitive_file_access",
+          "reason": "Sensitive / Config File Access (Apache)",
+          "layer": "web",
+          "severity": "high",
+          "evidence_refs": [
+            "sample_access.log:3"
+          ],
+          "detail": {
+            "timestamp": "2026-09-17T16:36:39.809951Z",
+            "pid": null,
+            "ppid": null,
+            "path": "/.env",
+            "method": "GET",
+            "status": 404,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.140 Safari/537.36"
+          }
+        }
+      ]
+    }
+  },
+  "raw_refs": [
+    "sample_access.log:3"
+  ],
+  "raw_ref_locations": {},
+  "provenance": {
+    "status": "passed",
+    "raw_ref_count": 1,
+    "seed_raw_refs": [
+      "sample_access.log:3"
+    ],
+    "evidence_without_raw_refs": [],
+    "empty_result_evidence": [
+      "EVID-003",
+      "EVID-004"
+    ],
+    "seed_only_evidence": [],
+    "ambiguous_raw_refs": {},
+    "issues": []
+  },
+  "hypothesis": {
+    "title": "단발성 스캐너 탐침으로 실질적 피해 없음",
+    "description": "단일 404 응답만 있는 단발성 요청으로, 후속 침해 정황이 없는 자동화 스캐너의 무해한 탐침일 가능성",
+    "confidence_initial": 0.5
+  },
+  "evidence_chain": [],
+  "contradicting_evidence": [
+    {
+      "sequence": 1,
+      "layer": "web",
+      "evidence_id": "EVID-003",
+      "description": "fetch_web_log(host=ip-10-0-7-236, start_time=2026-09-17T15:36:39Z, end_time=2026-09-17T17:36:39Z, src_ip=64.137.37.166)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능)'라고 명시되어 있어, seed의 evidence_refs(sample_access.log:3)에 해당하는 원본 기록을 재확인하지 못함.",
+      "confidence_reduction": 0.05,
+      "explanation": "fetch_web_log(host=ip-10-0-7-236, start_time=2026-09-17T15:36:39Z, end_time=2026-09-17T17:36:39Z, src_ip=64.137.37.166)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능)'라고 명시되어 있어, seed의 evidence_refs(sample_access.log:3)에 해당하는 원본 기록을 재확인하지 못함.",
+      "source_log": "apache_access_log",
+      "raw_ref": null,
+      "raw_refs": [],
+      "empty_result_call": 2,
+      "supporting_tool_calls": [
+        2
+      ],
+      "seed_only_raw_refs": []
+    },
+    {
+      "sequence": 2,
+      "layer": "process",
+      "evidence_id": "EVID-004",
+      "description": "fetch_audit_log(host=ip-10-0-7-236, start_time=2026-09-17T16:06:39Z, end_time=2026-09-17T17:36:39Z, 필터 없음)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다'라고 명시되어, 웹 요청 이후 서버 내부 행위(www-data/apache2 프로세스의 명령 실행 등) 여부를 확인할 원본 데이터가 없음.",
+      "confidence_reduction": 0.05,
+      "explanation": "fetch_audit_log(host=ip-10-0-7-236, start_time=2026-09-17T16:06:39Z, end_time=2026-09-17T17:36:39Z, 필터 없음)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다'라고 명시되어, 웹 요청 이후 서버 내부 행위(www-data/apache2 프로세스의 명령 실행 등) 여부를 확인할 원본 데이터가 없음.",
+      "source_log": "audit",
+      "raw_ref": null,
+      "raw_refs": [],
+      "empty_result_call": 3,
+      "supporting_tool_calls": [
+        3
+      ],
+      "seed_only_raw_refs": []
+    }
+  ],
+  "attack_timeline": [
+    {
+      "time": "2026-09-17T16:36:39.809951Z",
+      "event": "64.137.37.166이 /.env 경로에 GET 요청, 응답 404 (seed 트리거, 원본 재확인 실패)",
+      "source": "64.137.37.166"
+    }
+  ],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.5,
+      "reason": "Sensitive / Config File Access (Apache)"
+    },
+    {
+      "stage": "after_tool_2",
+      "confidence": 0.45,
+      "reason": "fetch_web_log(host=ip-10-0-7-236, start_time=2026-09-17T15:36:39Z, end_time=2026-09-17T17:36:39Z, src_ip=64.137.37.166)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능)'라고 명시되어 있어, seed의 evidence_refs(sample_access.log:3)에 해당하는 원본 기록을 재확인하지 못함."
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 0.4,
+      "reason": "fetch_audit_log(host=ip-10-0-7-236, start_time=2026-09-17T16:06:39Z, end_time=2026-09-17T17:36:39Z, 필터 없음)로 조회했으나 결과 0건. summary에 '이 구간에는 이 계층의 로그 기록 자체가 없습니다'라고 명시되어, 웹 요청 이후 서버 내부 행위(www-data/apache2 프로세스의 명령 실행 등) 여부를 확인할 원본 데이터가 없음."
+    }
+  ],
+  "final_verdict": {
+    "verdict": "INCONCLUSIVE",
+    "confidence": 0.45,
+    "severity": "LOW",
+    "attack_type": "웹 민감 설정파일 접근 시도(판정 불가)",
+    "affected_systems": [
+      "ip-10-0-7-236"
+    ],
+    "summary": "64.137.37.166이 /.env 경로에 GET 요청을 보내 404 응답을 받은 사건이 1차 탐지되었으나, seed가 가리키는 web 계층을 포함해 network·audit 계층 모두 해당 구간의 원본 로그를 확보하지 못해 실제 공격 성패나 후속 행위 여부를 확인할 수 없다.",
+    "reasoning": "원칙 9의 웹 반복 요청 판정 기준(요청 수·경로 수·상태코드 집계)을 적용하려 했으나, seed 단서인 web 계층 자체의 원본 로그(sample_access.log:3 해당 기록)를 재조회 결과 0건으로 확보하지 못했다. 이어서 같은 IP·시간대의 network 계층(사전조회)과 audit 계층(필터 없이 조회)도 모두 0건이며 summary에 '로그 기록 자체가 없음'이 명시되어, 활동이 없었다는 증거가 아니라 수집 누락으로 판단했다. 서로 다른 계층 3종(web, network, audit)을 확인했지만 모두 원본 로그 미확보 상태이므로 Q1(요청 수/경로 수)·Q3(후속 행위 범위)에 답할 수 없어 THREAT_CONFIRMED나 FALSE_POSITIVE 어느 쪽도 확정할 근거가 없다. 원칙에 따라 seed가 가리키는 계층의 로그를 확보하지 못한 경우 INCONCLUSIVE로 판정하며, confidence는 0.45~0.60 범위 규정에 맞춰 0.45로 산정했다."
+  },
+  "tools_called": [
+    {
+      "sequence": 1,
+      "tool_name": "fetch_network_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-17T16:06:39Z",
+        "end_time": "2026-09-17T17:06:39Z",
+        "ip": "64.137.37.166",
+        "limit": 20
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236의 2026-09-17T16:06:39Z~2026-09-17T17:06:39Z 구간에서 조건에 맞는 네트워크 이벤트를 찾지 못했습니다. host 이름, 기간, 또는 SURICATA_LOG_PATH 설정을 확인하세요. 이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능). '활동이 없었다'는 증거로 쓰지 말고 unknowns에 '원본 로그 미확보'로 남기십시오.",
+      "raw_refs": [],
+      "queried_layers": []
+    },
+    {
+      "sequence": 2,
+      "tool_name": "fetch_web_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-17T15:36:39Z",
+        "end_time": "2026-09-17T17:36:39Z",
+        "src_ip": "64.137.37.166"
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236의 2026-09-17T15:36:39Z~2026-09-17T17:36:39Z 구간에서 조건에 맞는 web 요청을 찾지 못했습니다. host 이름, 기간, 또는 APACHE_LOG_PATH 설정을 확인하세요. 이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능). '활동이 없었다'는 증거로 쓰지 말고 unknowns에 '원본 로그 미확보'로 남기십시오.",
+      "raw_refs": [],
+      "queried_layers": []
+    },
+    {
+      "sequence": 3,
+      "tool_name": "fetch_audit_log",
+      "input": {
+        "host": "ip-10-0-7-236",
+        "start_time": "2026-09-17T16:06:39Z",
+        "end_time": "2026-09-17T17:36:39Z"
+      },
+      "result_count": 0,
+      "result_summary": "ip-10-0-7-236의 2026-09-17T16:06:39Z~2026-09-17T17:36:39Z 구간에서 조건에 맞는 audit 이벤트를 찾지 못했습니다. host 이름, 기간, 또는 AUDIT_LOG_PATH 설정을 확인하세요. 이 구간에는 이 계층의 로그 기록 자체가 없습니다(수집 누락·로그 교체 가능). '활동이 없었다'는 증거로 쓰지 말고 unknowns에 '원본 로그 미확보'로 남기십시오.",
+      "raw_refs": [],
+      "queried_layers": []
+    }
+  ],
+  "statistics": {
+    "tool_calls_count": 3,
+    "tool_calls_max": 8,
+    "confidence_increase": -0.1,
+    "investigation_confidence": 0.4,
+    "evidence_count": 0,
+    "contradicting_evidence_count": 2,
+    "termination_reason": "no_more_evidence"
+  },
+  "remaining_unknowns": [
+    "seed가 가리키는 web 계층의 원본 로그(sample_access.log:3에 해당하는 실제 기록)를 재조회했으나 확보하지 못함 - 원본 로그 미확보",
+    "network 계층의 원본 로그 역시 해당 구간에서 확보하지 못함 - 원본 로그 미확보",
+    "audit 계층의 원본 로그 역시 해당 구간에서 확보하지 못함 - 원본 로그 미확보",
+    "64.137.37.166의 전체 웹 요청 패턴(요청 수, 경로 수, 상태코드 분포)을 확인할 원본 데이터가 없음",
+    "auth 계층은 조회하지 않았으나, seed가 web 단서이고 계정/로그인 관련 정황이 없어 조회 대상으로 보기 어려움"
+  ],
+  "investigation_notes": [
+    "시스템 사전 조회: seed의 src_ip(64.137.37.166)가 출발지 또는 목적지인 network 이벤트를 2026-09-17T16:06:39Z~2026-09-17T17:06:39Z 구간에서 fetch_network_log로 자동 조회했습니다.",
+    "web/network 두 계층 모두 원본 로그 수집 누락 가능성이 있어, 로그 수집 파이프라인(APACHE_LOG_PATH, SURICATA_LOG_PATH 등) 점검이 필요함",
+    "추후 동일 IP의 활동이 다른 시간대 로그에서 확인되면 재조사 권장",
+    "종료 관문 발동 — 종료 거부: 도구를 1종류만 직접 확인하고 no_more_evidence로 종료하려 함. 아직 확인하지 않은 도구 중 사건과 관련된 것을 최소 1회 호출하십시오 — fetch_audit_log: 서버에서 실행된 명령·파일 변경(웹 서버 프로세스 www-data/apache2의 셸·다운로드 실행, 로그인 세션의 명령) — 공격이 서버 안까지 이어졌는지 확인 / fetch_auth_log: 같은 IP·계정의 로그인 시도와 성공 여부",
+    "web/network/audit 로그 수집 파이프라인(APACHE_LOG_PATH, SURICATA_LOG_PATH, AUDIT_LOG_PATH 등) 설정 점검이 필요함",
+    "로그 수집이 정상화된 이후 동일 IP(64.137.37.166)의 재발 여부를 모니터링할 것을 권고"
+  ]
+}

