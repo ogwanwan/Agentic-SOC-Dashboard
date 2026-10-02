@@ -29,14 +29,109 @@ const publicOutputPath = path.join(publicOutputDir, "incidents.generated.json");
 const cleanText = (value, fallback = "-") =>
   typeof value === "string" && value.trim() ? value.trim() : fallback;
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+// 파이프라인 결과 폴더(results/)를 가리키면 하위 단계 폴더도 함께 읽습니다.
+// attack_mapping/ 의 *_final_report.json 은 조사 결과 + ATT&CK 매핑 최종본입니다.
+const STAGE_DIRS = ["attack_mapping", "investigation_agent"];
+const MAPPING_ONLY_SUFFIX = "_attack_mapping.json";
+
+// 매핑 결과만 담긴 파일(조사 판정 없음)은 사건이 아니므로 건너뜁니다.
+const isMappingOnly = (raw) =>
+  raw && typeof raw === "object" && !raw.final_verdict && "mapping_status" in raw;
+
+// 증거 ID → ATT&CK 매핑에서의 쓰임(매핑됨·제외·매칭 없음)
+const evidenceMappingIndex = (mapping) => {
+  if (!mapping || typeof mapping !== "object") return null;
+  const index = new Map();
+  for (const technique of asArray(mapping.techniques)) {
+    for (const id of asArray(technique.evidence_ids)) {
+      const entry = index.get(id) ?? { state: "mapped", techniques: [], reasons: [] };
+      entry.techniques.push(cleanText(technique.technique_id, "?"));
+      index.set(id, entry);
+    }
+  }
+  for (const item of asArray(mapping.exclusions)) {
+    if (!index.has(item.evidence_id)) {
+      index.set(item.evidence_id, { state: "excluded", techniques: [], reasons: asArray(item.reasons) });
+    }
+  }
+  for (const id of asArray(mapping.unmatched_evidence_ids)) {
+    if (!index.has(id)) index.set(id, { state: "unmatched", techniques: [], reasons: [] });
+  }
+  return index;
+};
+
+const toAttackMapping = (mapping) => {
+  if (!mapping || typeof mapping !== "object") return null;
+  const selectedByUnit = new Map();
+  for (const item of asArray(mapping.techniques)) {
+    for (const selection of asArray(item.selections)) {
+      const list = selectedByUnit.get(selection.mapping_unit_id) ?? [];
+      list.push(item.technique_id);
+      selectedByUnit.set(selection.mapping_unit_id, list);
+    }
+  }
+  return {
+    status: cleanText(mapping.mapping_status, "unknown"),
+    method: cleanText(mapping.mapping_method, "rule"),
+    attackVersion: cleanText(mapping.attack_version, ""),
+    retrievalVersion: cleanText(mapping.retrieval_version, ""),
+    techniques: asArray(mapping.techniques).map((item) => ({
+      id: cleanText(item.technique_id, "?"),
+      name: cleanText(item.technique_name, ""),
+      tactic: cleanText(item.tactic_name, "-"),
+      parent: item.parent_technique
+        ? `${cleanText(item.parent_technique.technique_id, "")} ${cleanText(item.parent_technique.technique_name, "")}`.trim()
+        : "",
+      evidenceIds: asArray(item.evidence_ids),
+      reasons: asArray(item.selections).map((selection) => ({
+        evidenceIds: asArray(selection.evidence_ids),
+        reason: cleanText(selection.reason, ""),
+      })),
+    })),
+    killChain: asArray(mapping.kill_chain).map((step) => ({
+      step: Number(step.step ?? 0),
+      tactic: cleanText(step.tactic_name, "-"),
+      techniqueId: cleanText(step.technique_id, "?"),
+      techniqueName: cleanText(step.technique_name, ""),
+      time: cleanText(step.time, ""),
+      evidenceIds: asArray(step.evidence_ids),
+    })),
+    trace: asArray(mapping.retrieval_trace).map((unit) => ({
+      evidenceId: cleanText(unit.mapping_unit_id, "").replace(/^UNIT-/, ""),
+      candidates: asArray(unit.candidate_ids),
+      selected: selectedByUnit.get(unit.mapping_unit_id) ?? [],
+    })),
+    exclusions: asArray(mapping.exclusions).map((item) => ({
+      evidenceId: cleanText(item.evidence_id, "?"),
+      reasons: asArray(item.reasons),
+    })),
+    unmatched: asArray(mapping.unmatched_evidence_ids),
+    rejected: asArray(mapping.rejected_selections).map((item) => ({
+      evidenceId: cleanText(item.mapping_unit_id, "").replace(/^UNIT-/, ""),
+      value: cleanText(item.value, ""),
+      code: cleanText(item.code, ""),
+    })),
+    errors: asArray(mapping.errors).map((item) => String(item)),
+  };
+};
+
 const toIncident = (result, sourceFile) => {
   const verdict = result.final_verdict ?? {};
   const seed = result.initial_seed ?? {};
   const stats = result.statistics ?? {};
   const provenance = result.provenance ?? {};
+  const mappingIndex = evidenceMappingIndex(result.attack_mapping);
+  const mappingOf = (id, contradicting) => {
+    if (!mappingIndex) return null;
+    if (contradicting) return { state: "context", techniques: [], reasons: [] };
+    return mappingIndex.get(id) ?? { state: "unknown", techniques: [], reasons: [] };
+  };
 
   return {
     sourceFile,
+    incidentKey: cleanText(result.incident_key, ""),
     incidentId: cleanText(result.incident_id, "UNKNOWN"),
     investigationId: cleanText(result.investigation_id, result.incident_id ?? "UNKNOWN"),
     status: cleanText(result.investigation_status, "COMPLETE"),
@@ -75,6 +170,7 @@ const toIncident = (result, sourceFile) => {
       rawRefs: Array.isArray(item.raw_refs) ? item.raw_refs : [],
       contribution: Number(item.confidence_contribution ?? 0),
       stance: "supporting",
+      mapping: mappingOf(item.evidence_id, false),
     })),
     contradictingEvidence: (
       Array.isArray(result.contradicting_evidence) ? result.contradicting_evidence : []
@@ -89,6 +185,7 @@ const toIncident = (result, sourceFile) => {
       rawRefs: Array.isArray(item.raw_refs) ? item.raw_refs : [],
       contribution: -Math.abs(Number(item.confidence_reduction ?? 0)),
       stance: "contradicting",
+      mapping: mappingOf(item.evidence_id, true),
     })),
     timeline: (Array.isArray(result.attack_timeline) ? result.attack_timeline : []).map((item) => ({
       time: cleanText(item.time, ""),
@@ -111,8 +208,45 @@ const toIncident = (result, sourceFile) => {
       contradictingEvidenceCount: Number(stats.contradicting_evidence_count ?? 0),
       terminationReason: cleanText(stats.termination_reason, "unknown"),
     },
+    attackMapping: toAttackMapping(result.attack_mapping),
   };
 };
+
+// 입력 폴더 + (있으면) 단계 폴더의 JSON 파일 목록. 표시 이름은 입력 폴더 기준 상대 경로입니다.
+export async function listResultFiles() {
+  const directories = [inputDir, ...STAGE_DIRS.map((name) => path.join(inputDir, name))];
+  const files = [];
+  for (const [index, directory] of directories.entries()) {
+    let names;
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if (index === 0) throw error; // 입력 폴더 자체가 없으면 호출한 쪽에서 처리합니다.
+      continue;
+    }
+    for (const name of names.sort()) {
+      if (!name.endsWith(".json") || name.endsWith(MAPPING_ONLY_SUFFIX)) continue;
+      files.push(path.relative(inputDir, path.join(directory, name)).split(path.sep).join("/"));
+    }
+  }
+  return files;
+}
+
+// 같은 사건(incident_key, 없으면 incident_id)을 다시 조사한 결과는 가장 최근 것 하나만 남깁니다.
+// 조사 시각이 같으면 ATT&CK 매핑이 붙은 최종 보고서를 우선합니다.
+function latestPerIncident(incidents) {
+  const best = new Map();
+  for (const incident of incidents) {
+    const key = incident.incidentKey || incident.incidentId;
+    const current = best.get(key);
+    const rank = [String(incident.timestamp), incident.attackMapping ? 1 : 0];
+    const currentRank = current && [String(current.timestamp), current.attackMapping ? 1 : 0];
+    if (!current || rank[0] > currentRank[0] || (rank[0] === currentRank[0] && rank[1] > currentRank[1])) {
+      best.set(key, incident);
+    }
+  }
+  return [...best.values()];
+}
 
 async function writeJsonAtomically(targetPath, contents) {
   const temporaryPath = `${targetPath}.${process.pid}.tmp`;
@@ -149,7 +283,7 @@ async function readMatchingSnapshot(paths, source, incidents) {
 export async function syncResults({ writeModuleSnapshot = true } = {}) {
   let files;
   try {
-    files = (await readdir(inputDir)).filter((name) => name.endsWith(".json")).sort();
+    files = await listResultFiles();
   } catch {
     console.log(`[sync-results] 입력 디렉터리가 없어 기존 생성 데이터를 유지합니다: ${inputDir}`);
     try {
@@ -164,11 +298,12 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
     return null;
   }
 
-  const incidents = [];
+  let incidents = [];
   const invalidFiles = [];
   for (const file of files) {
     try {
       const raw = JSON.parse(await readFile(path.join(inputDir, file), "utf8"));
+      if (isMappingOnly(raw)) continue;
       const results = Array.isArray(raw.results) ? raw.results : raw.incident_id ? [raw] : [];
       for (const result of results) incidents.push(toIncident(result, file));
     } catch (error) {
@@ -183,6 +318,7 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
     throw new Error(`완전히 기록되지 않은 JSON ${invalidFiles.length}개가 있어 동기화를 보류했습니다.`);
   }
 
+  incidents = latestPerIncident(incidents);
   incidents.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
   const source = path.relative(defaultInputDir, inputDir) === ""
     ? "results/*.json"

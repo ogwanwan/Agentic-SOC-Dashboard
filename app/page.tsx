@@ -65,6 +65,62 @@ type View = "overview" | "incidents" | "operations" | "pipeline";
 type Timezone = "UTC" | "KST";
 type SyncStatus = "connecting" | "live" | "retrying";
 
+// ATT&CK 매핑 결과(scripts/sync-results.mjs toAttackMapping). 매핑 전 결과에는 없으므로
+// 생성 JSON에서 타입을 추론하지 않고 직접 정의합니다.
+type EvidenceMapping = { state: string; techniques: string[]; reasons: string[] } | null;
+type AttackMapping = {
+  status: string;
+  method: string;
+  attackVersion: string;
+  retrievalVersion: string;
+  techniques: { id: string; name: string; tactic: string; parent: string; evidenceIds: string[]; reasons: { evidenceIds: string[]; reason: string }[] }[];
+  killChain: { step: number; tactic: string; techniqueId: string; techniqueName: string; time: string; evidenceIds: string[] }[];
+  trace: { evidenceId: string; candidates: string[]; selected: string[] }[];
+  exclusions: { evidenceId: string; reasons: string[] }[];
+  unmatched: string[];
+  rejected: { evidenceId: string; value: string; code: string }[];
+  errors: string[];
+};
+
+function attackMappingOf(incident: Incident): AttackMapping | null {
+  return (incident as Incident & { attackMapping?: AttackMapping | null }).attackMapping ?? null;
+}
+
+function evidenceMappingOf(item: object): EvidenceMapping {
+  return (item as { mapping?: EvidenceMapping }).mapping ?? null;
+}
+
+const mappingStatusMeta: Record<string, { label: string; style: string }> = {
+  mapped: { label: "매핑 완료", style: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200" },
+  partial: { label: "부분 매핑 · 원본 미확인 증거 제외", style: "border-amber-400/25 bg-amber-400/8 text-amber-300" },
+  no_techniques_matched: { label: "일치하는 기법 없음", style: "border-slate-400/20 bg-slate-400/8 text-slate-300" },
+  not_applicable: { label: "오탐 판정 · 매핑 안 함", style: "border-emerald-400/25 bg-emerald-400/8 text-emerald-300" },
+  deferred: { label: "판단 보류 · 매핑 안 함", style: "border-slate-400/20 bg-slate-400/8 text-slate-300" },
+  error: { label: "매핑 오류", style: "border-rose-400/25 bg-rose-400/8 text-rose-300" },
+};
+
+const evidenceMappingMeta: Record<string, { label: string; style: string }> = {
+  mapped: { label: "매핑", style: "border-cyan-400/25 text-cyan-200" },
+  excluded: { label: "매핑 제외", style: "border-slate-500/30 text-slate-400" },
+  unmatched: { label: "일치 기법 없음", style: "border-amber-400/25 text-amber-300" },
+  context: { label: "매핑 참고 문맥", style: "border-slate-500/30 text-slate-400" },
+};
+
+const exclusionReasonLabel: Record<string, string> = {
+  NO_RAW_REFS: "원본 줄 없음",
+  PROVENANCE_ISSUE: "원본 검증 문제",
+  EMPTY_RESULT: "0건 조회 증거",
+  AMBIGUOUS_RAW_REF: "모호한 참조",
+  UNOBSERVED_RAW_REF: "관측되지 않은 참조",
+  CONTRADICTING: "반박 증거",
+};
+
+function attackUrl(techniqueId: string) {
+  return /^T\d{4}(\.\d{3})?$/.test(techniqueId)
+    ? `https://attack.mitre.org/techniques/${techniqueId.replace(".", "/")}/`
+    : null;
+}
+
 const navigation = [
   { id: "overview" as View, label: "상황 개요", description: "우선순위와 위협 추이", icon: LayoutDashboard },
   { id: "incidents" as View, label: "사건", description: "조사 결과와 근거", icon: ListTree },
@@ -102,8 +158,13 @@ const verdictMeta: Record<string, { label: string; color: string; icon: typeof S
   INCONCLUSIVE: { label: "결론 불충분", color: "text-amber-300", icon: AlertTriangle },
 };
 
-function formatDate(value: string, timezone: Timezone, withDate = true) {
+function formatDate(value: string, timezone: Timezone, withDate = true): string {
   if (!value) return "-";
+  // 조사 증거의 시간 범위 표기("시작~끝")는 양쪽을 각각 변환합니다.
+  if (value.includes("~")) {
+    const [start, end] = value.split("~", 2);
+    return `${formatDate(start.trim(), timezone, withDate)} ~ ${formatDate(end.trim(), timezone, false)}`;
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ko-KR", {
@@ -400,6 +461,20 @@ function Overview({ incidents, onOpenIncident, timezone }: { incidents: Incident
   );
 }
 
+function TechniqueCell({ incident }: { incident: Incident }) {
+  const mapping = attackMappingOf(incident);
+  if (!mapping) return <span className="text-xs text-slate-500">매핑 전</span>;
+  if (!mapping.techniques.length) {
+    return <span className="text-xs text-muted-foreground">{mappingStatusMeta[mapping.status]?.label ?? mapping.status}</span>;
+  }
+  return (
+    <span className="flex max-w-[13rem] flex-wrap gap-1" title={mapping.techniques.map((item) => `${item.id} ${item.name} (${item.tactic})`).join("\n")}>
+      {mapping.techniques.slice(0, 2).map((item) => <span key={item.id} className="rounded border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 font-mono text-[0.7rem] text-cyan-200">{item.id}</span>)}
+      {mapping.techniques.length > 2 && <span className="text-[0.7rem] text-muted-foreground">+{mapping.techniques.length - 2}</span>}
+    </span>
+  );
+}
+
 function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void; timezone: Timezone }) {
   const [query, setQuery] = useState("");
   const [verdict, setVerdict] = useState("ALL");
@@ -407,7 +482,8 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
   const hasFilters = Boolean(query) || verdict !== "ALL" || severity !== "ALL";
 
   const filtered = useMemo(() => incidents.filter((item) => {
-    const text = `${item.incidentId} ${item.title} ${item.host} ${item.srcIp} ${item.summary}`.toLowerCase();
+    const techniques = (attackMappingOf(item)?.techniques ?? []).map((technique) => `${technique.id} ${technique.name}`).join(" ");
+    const text = `${item.incidentId} ${item.title} ${item.host} ${item.srcIp} ${item.summary} ${techniques}`.toLowerCase();
     return text.includes(query.toLowerCase()) && (verdict === "ALL" || item.verdict === verdict) && (severity === "ALL" || item.severity === severity);
   }), [incidents, query, severity, verdict]);
 
@@ -432,7 +508,7 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
         <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_170px_150px]">
           <div className="relative">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input aria-label="사건 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="사건 ID, IP, 호스트, 공격 유형 검색" className="h-11 border-white/10 bg-black/15 pl-10" />
+            <Input aria-label="사건 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="사건 ID, IP, 호스트, 공격 유형, ATT&CK 기법 검색" className="h-11 border-white/10 bg-black/15 pl-10" />
           </div>
           <NativeSelect aria-label="판정 필터" value={verdict} onChange={(event) => setVerdict(event.target.value)} className="h-11 w-full border-white/10 bg-black/15">
             <NativeSelectOption value="ALL">모든 판정</NativeSelectOption>
@@ -483,6 +559,7 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
             <TableHead scope="col" className="text-xs text-muted-foreground">심각도</TableHead>
             <TableHead scope="col" className="text-xs text-muted-foreground">판정</TableHead>
             <TableHead scope="col" className="text-xs text-muted-foreground">대상 / 출발지</TableHead>
+            <TableHead scope="col" className="text-xs text-muted-foreground">ATT&CK</TableHead>
             <TableHead scope="col" className="text-xs text-muted-foreground">증거</TableHead>
             <TableHead scope="col" className="text-xs text-muted-foreground">근거 상태</TableHead>
             <TableHead scope="col" className="pr-5 text-right text-xs text-muted-foreground">탐지 시각</TableHead>
@@ -504,6 +581,7 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
                 <p className="text-sm text-slate-300">{incident.host}</p>
                 <p className="mt-1 font-mono text-xs text-muted-foreground">{incident.srcIp}</p>
               </TableCell>
+              <TableCell><TechniqueCell incident={incident} /></TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">+{incident.evidence.length} / −{incident.contradictingEvidence.length}</TableCell>
               <TableCell><ProvenanceBadge status={incident.provenance.status} /></TableCell>
               <TableCell className="pr-5 text-right font-mono text-xs text-muted-foreground">{formatDate(incident.triggerTime, timezone)}</TableCell>
@@ -570,6 +648,116 @@ function IncidentGraph({ incident, timezone }: { incident: Incident; timezone: T
     <p className="mt-2 text-right text-[0.7rem] text-muted-foreground">빈 공간을 드래그해 이동 · 버튼 또는 Ctrl/⌘ + 휠로 확대·축소</p>
     <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
   </section>;
+}
+
+function EvidenceMappingBadge({ mapping }: { mapping: EvidenceMapping }) {
+  if (!mapping || !evidenceMappingMeta[mapping.state]) return null;
+  const meta = evidenceMappingMeta[mapping.state];
+  const detail = mapping.state === "mapped"
+    ? ` ${mapping.techniques.join(", ")}`
+    : "";
+  const title = mapping.reasons.length ? mapping.reasons.map((code) => exclusionReasonLabel[code] ?? code).join(", ") : undefined;
+  return <Badge variant="outline" title={title} className={`font-mono text-[0.7rem] ${meta.style}`}>ATT&CK {meta.label}{detail}</Badge>;
+}
+
+function TechniqueLink({ id, selected = false }: { id: string; selected?: boolean }) {
+  const href = attackUrl(id);
+  const style = selected
+    ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+    : "border-white/10 bg-white/[0.03] text-slate-300";
+  const className = `inline-flex rounded-md border px-2 py-0.5 font-mono text-xs ${style}`;
+  return href
+    ? <a href={href} target="_blank" rel="noopener noreferrer" className={`${className} hover:border-cyan-400/40 hover:text-cyan-200`}>{id}</a>
+    : <span className={className}>{id}</span>;
+}
+
+function AttackMappingPanel({ incident, timezone }: { incident: Incident; timezone: Timezone }) {
+  const mapping = attackMappingOf(incident);
+  if (!mapping) {
+    return <article className="signal-card p-5">
+      <div className="flex items-center gap-2"><Network className="size-4 text-violet-300" /><h3 className="font-semibold">ATT&CK 매핑</h3></div>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">이 사건은 조사 결과만 있고 매핑 결과가 없습니다. 조사 에이전트가 저장한 결과 파일로 <code className="text-xs text-cyan-200">python -m attack_mapping.cli &lt;조사 결과 파일&gt;</code>을 실행하면 매핑됩니다.</p>
+    </article>;
+  }
+  const status = mappingStatusMeta[mapping.status] ?? { label: mapping.status, style: mappingStatusMeta.deferred.style };
+  return (
+    <div className="space-y-5">
+      <section className="signal-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2"><Network className="size-4 text-violet-300" /><h3 className="font-semibold">ATT&CK 매핑</h3></div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">증거마다 공식 ATT&CK {mapping.attackVersion}에서 후보 10개를 검색하고, LLM이 근거가 있는 기법만 고른 뒤 코드가 ID·증거를 다시 검증했습니다.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={status.style}>{status.label}</Badge>
+            <Badge variant="outline" className="border-white/10 font-mono text-[0.7rem] text-slate-400">{mapping.method}</Badge>
+          </div>
+        </div>
+        {mapping.errors.length > 0 && <div className="mt-4 rounded-lg border border-rose-400/20 bg-rose-400/5 p-3 text-xs leading-5 text-rose-200">{mapping.errors.map((error) => <p key={error}>{error}</p>)}</div>}
+        {mapping.killChain.length > 0 ? (
+          <div className="mt-5 flex flex-wrap items-stretch gap-2">
+            {mapping.killChain.map((step, index) => (
+              <div key={`${step.step}-${step.techniqueId}`} className="flex items-center gap-2">
+                {index > 0 && <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-slate-500" />}
+                <div className="min-w-44 rounded-lg border border-violet-400/20 bg-violet-400/[0.06] p-3">
+                  <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-violet-300">{step.step}. {step.tactic}</p>
+                  <p className="mt-1.5 text-sm"><span className="font-mono font-semibold text-cyan-200">{step.techniqueId}</span> <span className="text-slate-200">{step.techniqueName}</span></p>
+                  <p className="mt-1 font-mono text-[0.7rem] text-muted-foreground">{formatDate(step.time, timezone)} {timezone} · {step.evidenceIds.join(", ")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="mt-4 text-sm text-muted-foreground">Kill Chain 단계가 없습니다.</p>}
+      </section>
+
+      {mapping.techniques.length > 0 && (
+        <section className="grid gap-4 xl:grid-cols-2">
+          {mapping.techniques.map((technique) => (
+            <article key={technique.id} className="signal-card p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <TechniqueLink id={technique.id} />
+                <h4 className="font-semibold text-slate-100">{technique.name}</h4>
+                <Badge variant="outline" className="border-violet-400/20 text-violet-300">{technique.tactic}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{technique.parent && <>상위 기법 {technique.parent} · </>}근거 증거 {technique.evidenceIds.join(", ")}</p>
+              <div className="mt-4 space-y-3">
+                {technique.reasons.map((item, index) => (
+                  <div key={`${technique.id}-${index}`} className="rounded-lg border-l-2 border-cyan-400/30 bg-black/15 px-3 py-2">
+                    <p className="font-mono text-[0.7rem] text-cyan-300">{item.evidenceIds.join(", ")} · LLM 선택 이유</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">{item.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {mapping.trace.length > 0 && (
+        <section className="signal-card overflow-hidden">
+          <div className="border-b border-white/8 p-5">
+            <h3 className="text-sm font-semibold">증거별 검색 후보와 선택</h3>
+            <p className="mt-1 text-xs text-muted-foreground">초록색이 LLM이 고르고 검증을 통과한 기법입니다. 선택이 없으면 후보 중 근거가 맞는 기법이 없다고 판단(ABSTAIN)한 것입니다.</p>
+          </div>
+          <div className="divide-y divide-white/7">
+            {mapping.trace.map((unit) => (
+              <div key={unit.evidenceId} className="grid gap-2 p-4 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                <div><p className="font-mono text-xs text-cyan-300">{unit.evidenceId}</p>{!unit.selected.length && <p className="mt-1 text-[0.7rem] text-amber-300">선택 없음</p>}</div>
+                <div className="flex flex-wrap gap-1.5">{unit.candidates.map((candidate) => <TechniqueLink key={candidate} id={candidate} selected={unit.selected.includes(candidate)} />)}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(mapping.exclusions.length > 0 || mapping.rejected.length > 0) && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          {mapping.exclusions.length > 0 && <article className="signal-card p-5"><h3 className="text-sm font-semibold">매핑에서 뺀 증거</h3><ul className="mt-3 space-y-2 text-sm text-muted-foreground">{mapping.exclusions.map((item) => <li key={item.evidenceId}><span className="font-mono text-xs text-slate-300">{item.evidenceId}</span> — {item.reasons.map((code) => exclusionReasonLabel[code] ?? code).join(", ")}</li>)}</ul></article>}
+          {mapping.rejected.length > 0 && <article className="signal-card p-5"><h3 className="text-sm font-semibold">검증에서 거부된 선택</h3><ul className="mt-3 space-y-2 text-sm text-muted-foreground">{mapping.rejected.map((item, index) => <li key={`${item.evidenceId}-${index}`} className="font-mono text-xs">{item.evidenceId} {item.value} — {item.code}</li>)}</ul></article>}
+        </section>
+      )}
+    </div>
+  );
 }
 
 function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: Incident | null; open: boolean; onOpenChange: (open: boolean) => void; timezone: Timezone }) {
@@ -658,7 +846,7 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
                 <div className="border-b border-white/8 p-5"><div className="flex items-center gap-2"><FileCode2 className="size-4 text-violet-300"/><h3 className="text-sm font-semibold">증거 체인</h3></div><p className="mt-1 text-xs text-muted-foreground">설명은 조사 결과 요약이며, 원본 참조만 표시합니다.</p></div>
                 <div className="divide-y divide-white/7">
                   {allEvidence.map((item) => <div key={`${item.id}-${item.sequence}`} className="p-5">
-                    <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-cyan-300">E{item.sequence}</span><Badge variant="outline" className="border-white/10 text-slate-300">{item.layer}</Badge><Badge variant="outline" className={item.stance === "supporting" ? "border-emerald-400/20 text-emerald-300" : "border-amber-400/20 text-amber-300"}>{item.stance === "supporting" ? "지지" : "반박"}</Badge><span className="ml-auto font-mono text-xs text-muted-foreground">{formatDate(item.time, timezone)}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-cyan-300">E{item.sequence}</span><Badge variant="outline" className="border-white/10 text-slate-300">{item.layer}</Badge><Badge variant="outline" className={item.stance === "supporting" ? "border-emerald-400/20 text-emerald-300" : "border-amber-400/20 text-amber-300"}>{item.stance === "supporting" ? "지지" : "반박"}</Badge><EvidenceMappingBadge mapping={evidenceMappingOf(item)} /><span className="ml-auto font-mono text-xs text-muted-foreground">{formatDate(item.time, timezone)}</span></div>
                     <p className="mt-3 text-sm leading-6 text-slate-200">{item.description}</p>
                     <details className="mt-3 rounded-lg border border-white/8 bg-black/15 px-3 py-2"><summary className="cursor-pointer text-xs text-muted-foreground">원본 참조 {item.rawRefs.length}개</summary><div className="mt-2 flex flex-wrap gap-2">{item.rawRefs.length ? item.rawRefs.map((ref) => <code key={ref} className="rounded bg-white/5 px-2 py-1 text-xs text-cyan-200">{ref}</code>) : <span className="text-xs text-amber-300">참조 없음</span>}</div></details>
                   </div>)}
@@ -668,14 +856,14 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
             </TabsContent>
 
             <TabsContent value="extensions" className="space-y-5">
-              <div className="grid gap-5 lg:grid-cols-3">
+              <AttackMappingPanel incident={incident} timezone={timezone} />
+              <div className="grid gap-5 lg:grid-cols-2">
                 {[
-                  { icon: Network, title: "ATT&CK 매핑", step: "⑦", text: "Technique ID, 전술, 매핑 근거가 이곳에 표시됩니다." },
                   { icon: Sparkles, title: "대응 생성", step: "⑧", text: "권고 조치, 영향 범위, 롤백 정보가 이곳에 표시됩니다." },
                   { icon: Waypoints, title: "자율성 레벨", step: "⑨", text: "L0/L1/L2와 실행·승인 상태가 이곳에 표시됩니다." },
                 ].map((item) => { const Icon = item.icon; return <article key={item.title} className="signal-card min-h-56 p-5"><div className="flex items-center justify-between"><div className="grid size-10 place-items-center rounded-lg border border-violet-400/20 bg-violet-400/8 text-violet-300"><Icon className="size-5"/></div><span className="font-mono text-xs text-slate-400">단계 {item.step}</span></div><h3 className="mt-5 font-semibold">{item.title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{item.text}</p><Badge variant="outline" className="mt-5 border-slate-600/40 text-slate-400">산출물 연결 예정</Badge></article>; })}
               </div>
-              <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-5 text-sm leading-6 text-cyan-100/70">현재 조사 에이전트 결과만 연결되어 있습니다. 후속 단계 스키마가 확정되면 이 영역에 데이터만 연결하도록 자리를 분리했습니다.</div>
+              <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-5 text-sm leading-6 text-cyan-100/70">조사 에이전트와 ATT&CK 매핑 결과가 연결되어 있습니다. 대응 생성·자율성 단계는 스키마가 확정되면 이 영역에 데이터만 연결하도록 자리를 분리했습니다.</div>
             </TabsContent>
 
             <TabsContent value="diagnostics" className="space-y-5">
@@ -760,7 +948,7 @@ const pipelineSteps = [
   { step: "04", title: "트리아지", subtitle: "조사 가치 · 우선순위", status: "active", icon: Bot },
   { step: "05", title: "조사 에이전트", subtitle: "도구 선택 루프", status: "active", icon: BrainCircuit },
   { step: "06", title: "판정·근거 검증", subtitle: "결론 · 신뢰도 · 출처", status: "active", icon: Fingerprint },
-  { step: "07", title: "ATT&CK 매핑", subtitle: "RAG · ID 검증", status: "planned", icon: Network },
+  { step: "07", title: "ATT&CK 매핑", subtitle: "RAG · ID 검증", status: "active", icon: Network },
   { step: "08", title: "대응 생성", subtitle: "근거 기반 조치", status: "planned", icon: Sparkles },
   { step: "09", title: "자율성 레벨", subtitle: "L0 · L1 · L2", status: "planned", icon: Waypoints },
   { step: "10", title: "대시보드", subtitle: "판정 · 근거 · 운영", status: "frame", icon: LayoutDashboard },
@@ -791,8 +979,8 @@ function Pipeline() {
         <article className="signal-card p-5 sm:p-6">
           <PanelTitle icon={Server} title="모델 연결" description="코드 구성 기준 스냅샷" />
           <div className="mt-6 space-y-3">
-            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Google Gemini</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">gemini-3.5-flash-lite</p></div>
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4"><p className="text-xs text-muted-foreground">지원 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p><p className="mt-3 text-xs text-muted-foreground">환경 설정으로 교체 가능</p></div>
+            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">claude-sonnet-5 · 거절 시 claude-sonnet-4-6</p><p className="mt-2 text-xs text-muted-foreground">조사 에이전트와 ATT&CK 매핑 선택 단계가 같은 모델을 씁니다. 트리아지 1차 의견은 claude-haiku-4-5입니다.</p></div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4"><p className="text-xs text-muted-foreground">지원 제공자</p><p className="mt-2 font-medium">Google Gemini</p><p className="mt-3 text-xs text-muted-foreground">LLM_PROVIDER=gemini 로 교체 가능</p></div>
             <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100/65">조사 결과 JSON에는 실제 실행 모델 ID가 기록되지 않아, 결과별 사용 모델은 확인할 수 없습니다.</div>
           </div>
         </article>

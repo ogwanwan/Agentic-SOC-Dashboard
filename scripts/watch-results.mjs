@@ -1,7 +1,7 @@
 import { watch } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
-import { inputDir, syncResults } from "./sync-results.mjs";
+import { inputDir, listResultFiles, syncResults } from "./sync-results.mjs";
 
 const 검사_주기 = 1_000;
 const 변경_대기 = 180;
@@ -18,7 +18,8 @@ let 마지막지문 = "";
 
 async function 디렉터리지문() {
   try {
-    const 파일들 = (await readdir(inputDir)).filter((이름) => 이름.endsWith(".json")).sort();
+    // 하위 단계 폴더(attack_mapping/ 등)의 변경은 fs.watch 가 놓칠 수 있어 주기 지문에 함께 넣습니다.
+    const 파일들 = await listResultFiles();
     const 상태 = await Promise.all(파일들.map(async (이름) => {
       const 정보 = await stat(path.join(inputDir, 이름));
       return `${이름}:${정보.size}:${정보.mtimeMs}`;
