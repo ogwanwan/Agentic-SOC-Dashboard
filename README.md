@@ -32,6 +32,14 @@ results/*.json
 SSOC_RESULTS_DIR=./results
 ```
 
+파이프라인의 `results/` 폴더를 지정하면 하위의 `attack_mapping/`(조사 결과 + ATT&CK 매핑 최종본)과 `investigation_agent/`(조사 결과)를 함께 읽습니다. 같은 사건을 다시 조사한 결과는 가장 최근 것 하나만 표시합니다.
+
+1차 탐지 incident DB(`soc.db`)를 함께 보려면 `SSOC_DB_PATH`를 지정합니다. 지정하면 상황 개요에 탐지→트리아지→조사→판정→매핑 단계별 처리 현황이, 사건 화면에 조사 전 사건까지 보여 주는 '탐지·대기열' 탭이, 사건 상세에 트리아지 점수와 Haiku 1차 의견이 표시됩니다. DB는 읽기 전용으로 열며 Node.js 내장 SQLite(22.13 이상)를 사용합니다. 결과 폴더와 DB는 같은 파이프라인 실행의 것을 지정해야 사건이 서로 연결됩니다.
+
+```dotenv
+SSOC_DB_PATH=/var/lib/agentic-soc/soc.db
+```
+
 `.env`는 Git에 포함되지 않습니다. 공유할 기본 설정은 `.env.example`을 참고하면 됩니다.
 
 ## 설치와 실행

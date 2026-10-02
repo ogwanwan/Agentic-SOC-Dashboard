@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, "..");
 const resultsDirFromProcess = process.env.SSOC_RESULTS_DIR;
+const dbPathFromProcess = process.env.SSOC_DB_PATH;
 
 try {
   loadEnvFile(path.join(projectDir, ".env"));
@@ -15,12 +16,16 @@ try {
 
 // 셸이나 배포 환경에서 직접 지정한 값이 로컬 .env 설정보다 우선합니다.
 if (resultsDirFromProcess !== undefined) process.env.SSOC_RESULTS_DIR = resultsDirFromProcess;
+if (dbPathFromProcess !== undefined) process.env.SSOC_DB_PATH = dbPathFromProcess;
 
 const configuredResultsDir = process.env.SSOC_RESULTS_DIR?.trim();
 const defaultInputDir = path.join(projectDir, "results");
 export const inputDir = configuredResultsDir
   ? path.resolve(projectDir, configuredResultsDir)
   : defaultInputDir;
+// 1차 탐지 incident DB(soc.db). 지정하지 않으면 DB 기능 없이 조사 결과만 보여 줍니다.
+const configuredDbPath = process.env.SSOC_DB_PATH?.trim();
+export const dbPath = configuredDbPath ? path.resolve(projectDir, configuredDbPath) : null;
 const outputDir = path.join(projectDir, "data");
 const outputPath = path.join(outputDir, "incidents.generated.json");
 const publicOutputDir = path.join(projectDir, "public", "data");
@@ -232,6 +237,146 @@ export async function listResultFiles() {
   return files;
 }
 
+// --- 1차 탐지 DB(soc.db) ----------------------------------------------------------
+// 파이프라인(detection_pipeline/store/incidents.py)이 5분마다 쓰는 DB를 읽기 전용으로 엽니다.
+// 상태 구분은 파이프라인 조사 대기열 조건(QUEUE_WHERE)과 같은 기준입니다.
+
+const parseJson = (text, fallback) => {
+  try {
+    return text ? JSON.parse(text) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const detectionState = (row) => {
+  // state.json 에서 옮겨 온 예전 기록은 route·우선순위·상세가 비어 있습니다(다음 새 활동 때 채워짐).
+  if (row.route === null || row.route === undefined) return "legacy";
+  if (row.route !== "investigate") return "not_targeted"; // P3·P4: 조사 대상이 아님
+  if (row.status === "done") return "done";
+  if (row.status === "investigating") return "investigating";
+  if (row.llm_investigate === 0) return "llm_filtered"; // Haiku 오탐 의견 → 대기열에서 제외
+  return "queued";
+};
+
+const toDetection = (row) => {
+  const extra = parseJson(row.extra_json, {});
+  const seeds = asArray(parseJson(row.seeds, []));
+  return {
+    incidentKey: cleanText(row.incident_key, ""),
+    incidentId: cleanText(row.incident_id, ""),
+    entityType: cleanText(row.entity_type, ""),
+    entityValue: cleanText(row.entity_value, "-"),
+    window: [cleanText(row.window_start, ""), cleanText(row.window_end, "")],
+    layers: [...new Set(asArray(parseJson(row.layers, [])))].sort(),
+    memberCount: Number(row.member_count ?? 0),
+    priority: cleanText(row.priority, "-"),
+    score: Number(row.triage_score ?? 0),
+    parts: extra.triage_parts
+      ? {
+          severity: Number(extra.triage_parts.severity ?? 0),
+          layers: Number(extra.triage_parts.layers ?? 0),
+          joinTypes: Number(extra.triage_parts.join_types ?? 0),
+          seedCount: Number(extra.triage_parts.seed_count ?? 0),
+        }
+      : null,
+    route: cleanText(row.route, "-"),
+    llmInvestigate: row.llm_investigate === null || row.llm_investigate === undefined ? null : Boolean(row.llm_investigate),
+    llmReason: cleanText(row.llm_reason, ""),
+    state: detectionState(row),
+    hasUpdate: Boolean(row.has_update),
+    firstDetected: cleanText(row.first_emitted, ""),
+    updatedAt: cleanText(row.updated_at, ""),
+    rules: [...new Set(seeds.map((seed) => cleanText(seed.reason, "")).filter(Boolean))],
+    ruleCount: seeds.length,
+    // 아래 두 값은 조사 결과와 연결한 뒤 채웁니다.
+    investigated: false,
+    resultKey: "",
+  };
+};
+
+async function loadDetections() {
+  if (!dbPath) return { enabled: false, connected: false, error: "", rows: [] };
+  let DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch {
+    return { enabled: true, connected: false, error: "이 Node.js는 내장 SQLite(node:sqlite)를 지원하지 않습니다(22.13 이상 필요).", rows: [] };
+  }
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true });
+    const rows = db.prepare(`
+      SELECT i.incident_key, i.incident_id, i.entity_type, i.entity_value, i.window_start, i.window_end,
+             i.member_count, i.triage_score, i.priority, i.route, i.llm_investigate, i.llm_reason,
+             i.status, i.has_update, i.first_emitted, i.updated_at,
+             d.layers, d.seeds, d.extra_json
+      FROM incidents i LEFT JOIN incident_details d ON d.incident_key = i.incident_key
+      ORDER BY i.updated_at DESC, i.triage_score DESC, i.incident_key ASC`).all();
+    return { enabled: true, connected: true, error: "", rows };
+  } catch (error) {
+    // 파이프라인이 쓰는 중이라 잠깐 잠긴 경우는 기존 스냅샷을 유지하고 감시기가 다시 시도하게 합니다.
+    if (/locked|busy/i.test(String(error.message))) {
+      throw new Error("incident DB가 잠시 사용 중이라 동기화를 보류했습니다.");
+    }
+    // 경로가 틀렸거나 파일이 없으면 DB 기능만 끄고 조사 결과는 계속 보여 줍니다.
+    return { enabled: true, connected: false, error: `DB를 읽지 못했습니다: ${error.message}`, rows: [] };
+  } finally {
+    db?.close();
+  }
+}
+
+// DB 사건과 조사 결과를 incident_key(없으면 incident_id)로 잇고, 탐지→판정 단계별 처리 현황 숫자를 만듭니다.
+function buildPipeline(loaded, incidents) {
+  const detections = loaded.rows.map(toDetection);
+  const byKey = new Map(detections.filter((item) => item.incidentKey).map((item) => [item.incidentKey, item]));
+  const byId = new Map(detections.filter((item) => item.incidentId).map((item) => [item.incidentId, item]));
+  let linked = 0;
+  for (const incident of incidents) {
+    const detection = (incident.incidentKey && byKey.get(incident.incidentKey)) || byId.get(incident.incidentId);
+    incident.triage = detection
+      ? {
+          priority: detection.priority, score: detection.score, parts: detection.parts,
+          llmInvestigate: detection.llmInvestigate, llmReason: detection.llmReason,
+          firstDetected: detection.firstDetected, updatedAt: detection.updatedAt,
+          rules: detection.rules, layers: detection.layers,
+        }
+      : null;
+    if (detection) {
+      linked += 1;
+      detection.investigated = true;
+      detection.resultKey = `${incident.sourceFile}::${incident.investigationId}`;
+      // 대기열 폴러를 거치지 않고 조사하면 결과는 있어도 DB 상태가 pending 으로 남습니다.
+      if (!["done", "investigating"].includes(detection.state)) detection.state = "result_unmarked";
+    }
+  }
+  const count = (predicate) => detections.filter(predicate).length;
+  const results = (predicate) => incidents.filter(predicate).length;
+  return {
+    enabled: loaded.enabled,
+    connected: loaded.connected,
+    error: loaded.error,
+    linked,
+    funnel: {
+      // 예전 기록은 트리아지 정보가 없어 처리 현황에서 빼고 건수만 따로 보여 줍니다.
+      detected: count((d) => d.state !== "legacy"),
+      legacy: count((d) => d.state === "legacy"),
+      byPriority: Object.fromEntries(["P1", "P2", "P3", "P4"].map((p) => [p, count((d) => d.priority === p)])),
+      targeted: count((d) => d.route === "investigate"),
+      llmFiltered: count((d) => d.state === "llm_filtered"),
+      queued: count((d) => d.state === "queued"),
+      investigating: count((d) => d.state === "investigating"),
+      resultUnmarked: count((d) => d.state === "result_unmarked"),
+      investigated: incidents.length,
+      threat: results((i) => i.verdict === "THREAT_CONFIRMED"),
+      falsePositive: results((i) => i.verdict === "FALSE_POSITIVE"),
+      inconclusive: results((i) => i.verdict === "INCONCLUSIVE"),
+      mapped: results((i) => (i.attackMapping?.techniques?.length ?? 0) > 0),
+    },
+    detections,
+  };
+}
+
 // 같은 사건(incident_key, 없으면 incident_id)을 다시 조사한 결과는 가장 최근 것 하나만 남깁니다.
 // 조사 시각이 같으면 ATT&CK 매핑이 붙은 최종 보고서를 우선합니다.
 function latestPerIncident(incidents) {
@@ -264,14 +409,14 @@ async function writeJsonIfChanged(targetPath, contents) {
   return true;
 }
 
-async function readMatchingSnapshot(paths, source, incidents) {
-  const expected = JSON.stringify({ source, incidents });
+async function readMatchingSnapshot(paths, source, incidents, pipeline) {
+  const expected = JSON.stringify({ source, incidents, pipeline });
   for (const candidatePath of paths) {
     try {
       const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
       if (
         typeof candidate.generatedAt === "string"
-        && JSON.stringify({ source: candidate.source, incidents: candidate.incidents }) === expected
+        && JSON.stringify({ source: candidate.source, incidents: candidate.incidents, pipeline: candidate.pipeline }) === expected
       ) return candidate;
     } catch {
       // 다른 후보 스냅샷을 계속 확인합니다.
@@ -320,6 +465,8 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
 
   incidents = latestPerIncident(incidents);
   incidents.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+  const pipeline = buildPipeline(await loadDetections(), incidents);
+  if (pipeline.error) console.warn(`[sync-results] ${pipeline.error}`);
   const source = path.relative(defaultInputDir, inputDir) === ""
     ? "results/*.json"
     : "SSOC_RESULTS_DIR/*.json";
@@ -327,8 +474,9 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
     [publicOutputPath, outputPath],
     source,
     incidents,
+    pipeline,
   );
-  const snapshot = existingSnapshot ?? { generatedAt: new Date().toISOString(), source, incidents };
+  const snapshot = existingSnapshot ?? { generatedAt: new Date().toISOString(), source, incidents, pipeline };
   const contents = `${JSON.stringify(snapshot, null, 2)}\n`;
 
   await Promise.all([
@@ -337,9 +485,12 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
   ]);
   const targets = writeModuleSnapshot ? [outputPath, publicOutputPath] : [publicOutputPath];
   const changed = (await Promise.all(targets.map((target) => writeJsonIfChanged(target, contents)))).some(Boolean);
+  const dbNote = pipeline.connected
+    ? ` · DB 사건 ${pipeline.detections.length}건(이전 기록 ${pipeline.funnel.legacy}건 포함, 조사 결과와 연결 ${pipeline.linked}건)`
+    : "";
   console.log(changed
-    ? `[sync-results] ${incidents.length}건 저장 · ${snapshot.generatedAt}`
-    : `[sync-results] 변경 없음 · ${incidents.length}건`);
+    ? `[sync-results] ${incidents.length}건 저장${dbNote} · ${snapshot.generatedAt}`
+    : `[sync-results] 변경 없음 · ${incidents.length}건${dbNote}`);
   return snapshot;
 }
 

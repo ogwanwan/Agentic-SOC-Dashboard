@@ -1,7 +1,7 @@
 import { watch } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { inputDir, listResultFiles, syncResults } from "./sync-results.mjs";
+import { dbPath, inputDir, listResultFiles, syncResults } from "./sync-results.mjs";
 
 const 검사_주기 = 1_000;
 const 변경_대기 = 180;
@@ -24,6 +24,17 @@ async function 디렉터리지문() {
       const 정보 = await stat(path.join(inputDir, 이름));
       return `${이름}:${정보.size}:${정보.mtimeMs}`;
     }));
+    // incident DB는 WAL 모드라 새 기록이 soc.db-wal 에 먼저 쌓이므로 두 파일을 함께 봅니다.
+    if (dbPath) {
+      for (const 파일 of [dbPath, `${dbPath}-wal`]) {
+        try {
+          const 정보 = await stat(파일);
+          상태.push(`${path.basename(파일)}:${정보.size}:${정보.mtimeMs}`);
+        } catch {
+          상태.push(`${path.basename(파일)}:없음`);
+        }
+      }
+    }
     return 상태.join("|");
   } catch {
     return "__missing__";

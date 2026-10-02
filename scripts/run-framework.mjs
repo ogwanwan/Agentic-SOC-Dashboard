@@ -50,8 +50,11 @@ const cli = new URL(managedLinux
   : "../node_modules/vinext/dist/cli.js", import.meta.url);
 process.argv = [process.execPath, fileURLToPath(cli), command,
   ...(!managedLinux && command === "dev" ? ["--port", "5173"] : []), ...args];
+// 개발 서버 CLI는 서버를 띄워 둔 채 import 가 바로 끝납니다. 여기서 감시기를 끄면 시작 직후 꺼지므로,
+// 감시기는 위의 process.once("exit") 에서 서버 프로세스가 끝날 때만 정리합니다.
 try {
   await import(cli.href);
-} finally {
+} catch (error) {
   dataWatcher?.kill();
+  throw error;
 }
