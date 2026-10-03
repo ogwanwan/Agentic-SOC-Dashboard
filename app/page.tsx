@@ -33,9 +33,6 @@ import {
   Waypoints,
   WifiOff,
   Wrench,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,7 +43,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -64,6 +67,13 @@ type DashboardData = typeof resultData;
 type View = "overview" | "incidents" | "operations" | "pipeline";
 type Timezone = "UTC" | "KST";
 type SyncStatus = "connecting" | "live" | "retrying";
+type IncidentVerdictFilter = "ALL" | "THREAT_CONFIRMED" | "FALSE_POSITIVE" | "INCONCLUSIVE";
+type IncidentSeverityFilter = "ALL" | "URGENT" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+type IncidentFilterPreset = {
+  revision: number;
+  verdict: IncidentVerdictFilter;
+  severity: IncidentSeverityFilter;
+};
 
 // ATT&CK 매핑 결과(scripts/sync-results.mjs toAttackMapping). 매핑 전 결과에는 없으므로
 // 생성 JSON에서 타입을 추론하지 않고 직접 정의합니다.
@@ -414,7 +424,7 @@ function PipelineFunnel({ pipeline }: { pipeline: PipelineData | null }) {
   );
 }
 
-function Overview({ incidents, pipeline, onOpenIncident, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; timezone: Timezone }) {
+function Overview({ incidents, pipeline, onOpenIncident, onOpenFilteredIncidents, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenFilteredIncidents: (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => void; timezone: Timezone }) {
   const counts = useMemo(() => ({
     all: incidents.length,
     threat: incidents.filter((item) => item.verdict === "THREAT_CONFIRMED").length,
@@ -463,10 +473,10 @@ function Overview({ incidents, pipeline, onOpenIncident, timezone }: { incidents
     ? incidents.reduce((sum, item) => sum + item.investigationConfidence, 0) / incidents.length
     : 0;
   const cards = [
-    { label: "전체 조사", value: counts.all, note: "연결된 결과", color: "text-cyan-300", tone: "all", icon: Layers3 },
-    { label: "긴급 · 높음", value: counts.urgent, note: "우선 검토", color: "text-orange-300", tone: "urgent", icon: AlertTriangle },
-    { label: "위협 확인", value: counts.threat, note: "조치 후보", color: "text-rose-300", tone: "threat", icon: ShieldAlert },
-    { label: "추가 조사", value: counts.inconclusive, note: "결론 불충분", color: "text-amber-300", tone: "inconclusive", icon: CircleDashed },
+    { label: "전체 조사", value: counts.all, note: "연결된 결과", color: "text-cyan-300", tone: "all", icon: Layers3, filter: { verdict: "ALL", severity: "ALL" } },
+    { label: "긴급 · 높음", value: counts.urgent, note: "우선 검토", color: "text-orange-300", tone: "urgent", icon: AlertTriangle, filter: { verdict: "ALL", severity: "URGENT" } },
+    { label: "위협 확인", value: counts.threat, note: "조치 후보", color: "text-rose-300", tone: "threat", icon: ShieldAlert, filter: { verdict: "THREAT_CONFIRMED", severity: "ALL" } },
+    { label: "추가 조사", value: counts.inconclusive, note: "결론 불충분", color: "text-amber-300", tone: "inconclusive", icon: CircleDashed, filter: { verdict: "INCONCLUSIVE", severity: "ALL" } },
   ];
 
   return (
@@ -476,7 +486,13 @@ function Overview({ incidents, pipeline, onOpenIncident, timezone }: { incidents
         {cards.map((card) => {
           const Icon = card.icon;
           return (
-            <article key={card.label} className={`signal-card overview-metric overview-metric--${card.tone} p-4 sm:p-5`}>
+            <button
+              type="button"
+              key={card.label}
+              onClick={() => onOpenFilteredIncidents(card.filter as Pick<IncidentFilterPreset, "verdict" | "severity">)}
+              className={`signal-card overview-metric overview-metric--${card.tone} p-4 text-left sm:p-5`}
+              aria-label={`${card.label} ${card.value}건 사건 목록 보기`}
+            >
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
                 <span className="overview-metric__icon"><Icon aria-hidden="true" className={`size-4 ${card.color}`} /></span>
@@ -485,7 +501,7 @@ function Overview({ incidents, pipeline, onOpenIncident, timezone }: { incidents
                 <strong className={`font-mono text-3xl font-semibold tracking-tight ${card.color}`}>{card.value}</strong>
                 <span className="text-xs text-muted-foreground sm:text-sm">{card.note}</span>
               </div>
-            </article>
+            </button>
           );
         })}
       </section>
@@ -619,16 +635,18 @@ function TechniqueCell({ incident }: { incident: Incident }) {
   );
 }
 
-function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void; timezone: Timezone }) {
+function IncidentList({ incidents, onOpenIncident, filterPreset, timezone }: { incidents: Incident[]; onOpenIncident: (item: Incident) => void; filterPreset: IncidentFilterPreset; timezone: Timezone }) {
   const [query, setQuery] = useState("");
-  const [verdict, setVerdict] = useState("ALL");
-  const [severity, setSeverity] = useState("ALL");
+  const [verdict, setVerdict] = useState<IncidentVerdictFilter>(filterPreset.verdict);
+  const [severity, setSeverity] = useState<IncidentSeverityFilter>(filterPreset.severity);
   const hasFilters = Boolean(query) || verdict !== "ALL" || severity !== "ALL";
 
   const filtered = useMemo(() => incidents.filter((item) => {
     const techniques = (attackMappingOf(item)?.techniques ?? []).map((technique) => `${technique.id} ${technique.name}`).join(" ");
     const text = `${item.incidentId} ${item.title} ${item.host} ${item.srcIp} ${item.summary} ${techniques}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && (verdict === "ALL" || item.verdict === verdict) && (severity === "ALL" || item.severity === severity);
+    const severityMatches = severity === "ALL"
+      || (severity === "URGENT" ? ["CRITICAL", "HIGH"].includes(item.severity) : item.severity === severity);
+    return text.includes(query.toLowerCase()) && (verdict === "ALL" || item.verdict === verdict) && severityMatches;
   }), [incidents, query, severity, verdict]);
 
   return (
@@ -654,16 +672,27 @@ function IncidentList({ incidents, onOpenIncident, timezone }: { incidents: Inci
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input aria-label="사건 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="사건 ID, IP, 호스트, 공격 유형, ATT&CK 기법 검색" className="h-11 border-white/10 bg-black/15 pl-10" />
           </div>
-          <NativeSelect aria-label="판정 필터" value={verdict} onChange={(event) => setVerdict(event.target.value)} className="h-11 w-full border-white/10 bg-black/15">
-            <NativeSelectOption value="ALL">모든 판정</NativeSelectOption>
-            <NativeSelectOption value="THREAT_CONFIRMED">위협 확인</NativeSelectOption>
-            <NativeSelectOption value="FALSE_POSITIVE">비위협 판정</NativeSelectOption>
-            <NativeSelectOption value="INCONCLUSIVE">결론 불충분</NativeSelectOption>
-          </NativeSelect>
-          <NativeSelect aria-label="심각도 필터" value={severity} onChange={(event) => setSeverity(event.target.value)} className="h-11 w-full border-white/10 bg-black/15">
-            <NativeSelectOption value="ALL">모든 심각도</NativeSelectOption>
-            {Object.keys(severityOrder).map((item) => <NativeSelectOption key={item} value={item}>{item}</NativeSelectOption>)}
-          </NativeSelect>
+          <Select value={verdict} onValueChange={(value) => setVerdict(value as IncidentVerdictFilter)}>
+            <SelectTrigger aria-label="판정 필터" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
+              <SelectValue placeholder="판정 선택" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="border-white/10 bg-[#0b171d] font-sans text-slate-200 shadow-2xl shadow-black/50">
+              <SelectItem value="ALL">모든 판정</SelectItem>
+              <SelectItem value="THREAT_CONFIRMED">위협 확인</SelectItem>
+              <SelectItem value="FALSE_POSITIVE">비위협 판정</SelectItem>
+              <SelectItem value="INCONCLUSIVE">결론 불충분</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={severity} onValueChange={(value) => setSeverity(value as IncidentSeverityFilter)}>
+            <SelectTrigger aria-label="심각도 필터" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
+              <SelectValue placeholder="심각도 선택" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="border-white/10 bg-[#0b171d] font-sans text-slate-200 shadow-2xl shadow-black/50">
+              <SelectItem value="ALL">모든 심각도</SelectItem>
+              <SelectItem value="URGENT">CRITICAL · HIGH</SelectItem>
+              {Object.keys(severityOrder).map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <p className="sr-only" aria-live="polite">검색 결과 {filtered.length}건</p>
       </div>
@@ -758,15 +787,25 @@ function DetectionTable({ detections, onOpenResult, timezone }: { detections: De
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input aria-label="탐지 사건 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="IP, pid, 사건 ID, 탐지 룰, Haiku 의견 검색" className="h-11 border-white/10 bg-black/15 pl-10" />
           </div>
-          <NativeSelect aria-label="우선순위 필터" value={priority} onChange={(event) => setPriority(event.target.value)} className="h-11 w-full border-white/10 bg-black/15">
-            <NativeSelectOption value="ALL">모든 우선순위</NativeSelectOption>
-            <NativeSelectOption value="P1P2">P1·P2 (조사 대상)</NativeSelectOption>
-            {["P1", "P2", "P3", "P4"].map((item) => <NativeSelectOption key={item} value={item}>{item}</NativeSelectOption>)}
-          </NativeSelect>
-          <NativeSelect aria-label="상태 필터" value={state} onChange={(event) => setState(event.target.value)} className="h-11 w-full border-white/10 bg-black/15">
-            <NativeSelectOption value="ALL">모든 상태</NativeSelectOption>
-            {Object.entries(detectionStateMeta).map(([key, meta]) => <NativeSelectOption key={key} value={key}>{meta.label}</NativeSelectOption>)}
-          </NativeSelect>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger aria-label="우선순위 필터" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
+              <SelectValue placeholder="우선순위 선택" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="border-white/10 bg-[#0b171d] font-sans text-slate-200 shadow-2xl shadow-black/50">
+              <SelectItem value="ALL">모든 우선순위</SelectItem>
+              <SelectItem value="P1P2">P1·P2 (조사 대상)</SelectItem>
+              {["P1", "P2", "P3", "P4"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={state} onValueChange={setState}>
+            <SelectTrigger aria-label="상태 필터" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
+              <SelectValue placeholder="상태 선택" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="border-white/10 bg-[#0b171d] font-sans text-slate-200 shadow-2xl shadow-black/50">
+              <SelectItem value="ALL">모든 상태</SelectItem>
+              {Object.entries(detectionStateMeta).map(([key, meta]) => <SelectItem key={key} value={key}>{meta.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div>
@@ -827,10 +866,10 @@ function DetectionTable({ detections, onOpenResult, timezone }: { detections: De
   );
 }
 
-function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenResult: (resultKey: string) => void; timezone: Timezone }) {
+function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, filterPreset, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenResult: (resultKey: string) => void; filterPreset: IncidentFilterPreset; timezone: Timezone }) {
   const [tab, setTab] = useState<"results" | "detections">("results");
   const hasDetections = Boolean(pipeline?.enabled && pipeline.connected);
-  if (!hasDetections || !pipeline) return <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} timezone={timezone} />;
+  if (!hasDetections || !pipeline) return <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} filterPreset={filterPreset} timezone={timezone} />;
   return (
     <div className="space-y-4">
       <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1" role="tablist" aria-label="사건 보기 선택">
@@ -839,7 +878,7 @@ function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, time
         ))}
       </div>
       {tab === "results"
-        ? <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} timezone={timezone} />
+        ? <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} filterPreset={filterPreset} timezone={timezone} />
         : <DetectionTable detections={pipeline.detections} onOpenResult={onOpenResult} timezone={timezone} />}
     </div>
   );
@@ -847,57 +886,50 @@ function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, time
 
 function IncidentGraph({ incident, timezone }: { incident: Incident; timezone: Timezone }) {
   const nodes = useMemo(() => {
-    const sourceNodes = incident.srcIp ? [{ id: `source-${incident.srcIp}`, label: "출발지", title: incident.srcIp, detail: incident.detectionSource || "외부 접근 주체", icon: Network, color: "rose" }] : [];
+    const sourceNodes = incident.srcIp ? [{ id: `source-${incident.srcIp}`, kind: "source", label: "출발지", title: incident.srcIp, detail: incident.detectionSource || "외부 접근 주체", icon: Network, color: "rose" }] : [];
     const eventNodes = incident.timeline.length
-      ? incident.timeline.map((item, index) => ({ id: `timeline-${index}-${item.time}`, label: `이벤트 ${index + 1}`, title: item.event, detail: [item.source, formatDate(item.time, timezone)].filter(Boolean).join(" · "), icon: Activity, color: index % 2 ? "cyan" : "amber" }))
+      ? incident.timeline.map((item, index) => ({ id: `timeline-${index}-${item.time}`, kind: "event", label: `이벤트 ${index + 1}`, title: item.event, detail: [item.source, formatDate(item.time, timezone)].filter(Boolean).join(" · "), icon: Activity, color: index % 2 ? "cyan" : "amber" }))
       : [...incident.evidence, ...incident.contradictingEvidence]
           .sort((a, b) => a.sequence - b.sequence)
-          .map((item) => ({ id: `evidence-${item.id}`, label: item.stance === "supporting" ? "지지 증거" : "반박 증거", title: item.description, detail: `${item.layer} · ${item.eventType}`, icon: Fingerprint, color: item.stance === "supporting" ? "cyan" : "amber" }));
+          .map((item) => ({ id: `evidence-${item.id}`, kind: "event", label: item.stance === "supporting" ? "지지 증거" : "반박 증거", title: item.description, detail: `${item.layer} · ${item.eventType}`, icon: Fingerprint, color: item.stance === "supporting" ? "cyan" : "amber" }));
     const systems = incident.affectedSystems.length ? incident.affectedSystems : incident.host ? [incident.host] : [];
-    const targetNodes = [...new Set(systems)].map((system) => ({ id: `target-${system}`, label: "영향 시스템", title: system, detail: incident.title, icon: Server, color: "violet" }));
+    const targetNodes = [...new Set(systems)].map((system) => ({ id: `target-${system}`, kind: "target", label: "영향 시스템", title: system, detail: incident.title, icon: Server, color: "violet" }));
     return [...sourceNodes, ...eventNodes, ...targetNodes];
   }, [incident, timezone]);
-  const fitZoom = Math.max(0.55, Math.min(1, 4 / Math.max(nodes.length, 1)));
   const [active, setActive] = useState(0);
-  const [zoom, setZoom] = useState(fitZoom);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const [dragOrigin, setDragOrigin] = useState({ x: 0, y: 0 });
-
-  const changeZoom = (next: number) => setZoom(Math.min(1.6, Math.max(0.5, Number(next.toFixed(2)))));
-  const fitGraph = () => {
-    setZoom(fitZoom);
-    setPan({ x: 0, y: 0 });
+  const relationshipLabel = (index: number) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return "";
+    if (next.kind === "target") return "대상 연결";
+    if (current.kind === "source") return "활동 시작";
+    if (/종료|완료|총\s*\d+|집계/.test(next.title)) return "결과 집계";
+    if (/명령|실행|프로세스|쉘/.test(next.title)) return "후속 실행";
+    if (/접근|스캔|탐색|요청/.test(next.title)) {
+      return /접근|스캔|탐색|요청/.test(current.title) ? "연속 요청" : "탐색 확장";
+    }
+    return "시간 순서";
   };
   const selected = nodes[active];
   if (!selected) return null;
   const SelectedIcon = selected.icon;
   return <section className="attack-graph signal-card p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">공격 경로</p><h3 className="mt-2 font-semibold">사건 연결 관계</h3></div><div className="flex items-center gap-3"><span className="font-mono text-xs text-muted-foreground">노드 {nodes.length} · 연결 {Math.max(0, nodes.length - 1)}</span><div className="attack-zoom-controls" aria-label="그래프 확대 및 축소"><button type="button" onClick={() => changeZoom(zoom - 0.1)} disabled={zoom <= 0.5} aria-label="축소"><ZoomOut className="size-4" /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" onClick={() => changeZoom(zoom + 0.1)} disabled={zoom >= 1.6} aria-label="확대"><ZoomIn className="size-4" /></button><button type="button" onClick={fitGraph} aria-label="화면에 맞춤" title="화면에 맞춤"><Maximize2 className="size-4" /></button></div></div></div>
+    <div><h3 className="font-semibold">사건 연결 관계</h3><p className="mt-1 text-xs text-muted-foreground">노드 사이의 관계를 따라 사건 흐름을 확인합니다. 그래프는 가로로 스크롤할 수 있습니다.</p></div>
     <div
-      className={`attack-graph__viewport mt-5 ${dragging ? "is-dragging" : ""}`}
-      onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); changeZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1)); } }}
-      onPointerDown={(event) => {
-        if ((event.target as Element).closest("button")) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setDragging(true);
-        setDragOrigin({ x: event.clientX - pan.x, y: event.clientY - pan.y });
-      }}
-      onPointerMove={(event) => { if (dragging) setPan({ x: event.clientX - dragOrigin.x, y: event.clientY - dragOrigin.y }); }}
-      onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); setDragging(false); }}
-      onPointerCancel={() => setDragging(false)}
+      className="attack-graph__viewport mt-5"
+      tabIndex={0}
+      aria-label="사건 연결 관계 그래프. 좌우로 스크롤하여 모든 노드를 확인할 수 있습니다."
     >
-      <div className="attack-graph__stage" style={{ minWidth: `${Math.max(760, nodes.length * 195)}px`, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transition: dragging ? "none" : undefined }}><div className="flex items-center">
+      <div className="attack-graph__stage" style={{ minWidth: `${Math.max(960, nodes.length * 245)}px` }}><div className="flex items-center">
       {nodes.map((node, index) => { const Icon = node.icon; return <div key={node.id} className="flex min-w-0 flex-1 items-center">
         <button type="button" onClick={() => setActive(index)} className={`attack-node attack-node--${node.color} ${active === index ? "is-active" : ""}`} aria-pressed={active === index}>
           <span className="attack-node__icon"><Icon className="size-5" /></span><span className="text-left"><small>{node.label}</small><strong>{node.title}</strong><em>{node.detail}</em></span>
         </button>
-        {index < nodes.length - 1 && <div className="attack-edge"><span>{nodes[index + 1].label}</span><i /></div>}
+        {index < nodes.length - 1 && <div className="attack-edge"><span>{relationshipLabel(index)}</span><i /></div>}
       </div>; })}
       </div></div>
     </div>
-    <p className="mt-2 text-right text-[0.7rem] text-muted-foreground">빈 공간을 드래그해 이동 · 버튼 또는 Ctrl/⌘ + 휠로 확대·축소</p>
-    <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
+    <div className="mt-4 flex items-center gap-3 rounded-lg border border-white/8 bg-black/20 p-3"><span className="grid size-10 shrink-0 place-items-center rounded-lg bg-cyan-400/10 text-cyan-300"><SelectedIcon className="size-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">선택한 노드 · {selected.label}</p><p className="mt-1 truncate text-sm font-semibold">{selected.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{selected.detail}</p></div></div>
   </section>;
 }
 
@@ -931,22 +963,23 @@ function AttackMappingPanel({ incident, timezone }: { incident: Incident; timezo
     </article>;
   }
   const status = mappingStatusMeta[mapping.status] ?? { label: mapping.status, style: mappingStatusMeta.deferred.style };
+  const methodLabel = mapping.method.toLowerCase().includes("rag") ? "RAG + 근거 검증" : mapping.method;
   return (
     <div className="space-y-5">
       <section className="signal-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2"><Network className="size-4 text-violet-300" /><h3 className="font-semibold">ATT&CK 매핑</h3></div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">증거마다 공식 ATT&CK {mapping.attackVersion}에서 후보 10개를 검색하고, LLM이 근거가 있는 기법만 고른 뒤 코드가 ID·증거를 다시 검증했습니다.</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">증거마다 공식 ATT&CK {mapping.attackVersion}에서 RAG로 후보 10개를 검색하고, 근거가 있는 기법만 선택한 뒤 코드가 ID와 증거 연결을 다시 검증했습니다.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={status.style}>{status.label}</Badge>
-            <Badge variant="outline" className="border-white/10 font-mono text-[0.7rem] text-slate-400">{mapping.method}</Badge>
+            <Badge variant="outline" className="border-violet-400/20 bg-violet-400/[0.05] text-[0.7rem] text-violet-200">{methodLabel}</Badge>
           </div>
         </div>
         {mapping.errors.length > 0 && <div className="mt-4 rounded-lg border border-rose-400/20 bg-rose-400/5 p-3 text-xs leading-5 text-rose-200">{mapping.errors.map((error) => <p key={error}>{error}</p>)}</div>}
-        {mapping.killChain.length > 0 ? (
-          <div className="mt-5 flex flex-wrap items-stretch gap-2">
+        {mapping.killChain.length > 0 && (
+          <div className="mt-5 flex flex-wrap items-stretch gap-2 border-t border-white/8 pt-5">
             {mapping.killChain.map((step, index) => (
               <div key={`${step.step}-${step.techniqueId}`} className="flex items-center gap-2">
                 {index > 0 && <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-slate-500" />}
@@ -958,13 +991,18 @@ function AttackMappingPanel({ incident, timezone }: { incident: Incident; timezo
               </div>
             ))}
           </div>
-        ) : <p className="mt-4 text-sm text-muted-foreground">Kill Chain 단계가 없습니다.</p>}
+        )}
       </section>
 
       {mapping.techniques.length > 0 && (
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="signal-card overflow-hidden border-violet-400/15">
+          <div className="border-b border-violet-400/12 bg-violet-400/[0.035] p-5">
+            <div className="flex items-center gap-2 text-violet-200"><Network className="size-4" /><h3 className="text-sm font-semibold">증거 기반 ATT&CK 매핑</h3></div>
+            <p className="mt-1 text-xs text-muted-foreground">기법 정보와 해당 기법을 뒷받침한 증거의 매핑 근거입니다.</p>
+          </div>
+          <div className="grid gap-4 p-4 xl:grid-cols-2">
           {mapping.techniques.map((technique) => (
-            <article key={technique.id} className="signal-card p-5">
+            <article key={technique.id} className="rounded-xl border border-violet-400/15 bg-violet-400/[0.025] p-5">
               <div className="flex flex-wrap items-center gap-2">
                 <TechniqueLink id={technique.id} />
                 <h4 className="font-semibold text-slate-100">{technique.name}</h4>
@@ -974,26 +1012,32 @@ function AttackMappingPanel({ incident, timezone }: { incident: Incident; timezo
               <div className="mt-4 space-y-3">
                 {technique.reasons.map((item, index) => (
                   <div key={`${technique.id}-${index}`} className="rounded-lg border-l-2 border-cyan-400/30 bg-black/15 px-3 py-2">
-                    <p className="font-mono text-[0.7rem] text-cyan-300">{item.evidenceIds.join(", ")} · LLM 선택 이유</p>
+                    <p className="font-mono text-[0.7rem] text-cyan-300">{item.evidenceIds.join(", ")} · 매핑 근거</p>
                     <p className="mt-1 text-sm leading-6 text-slate-300">{item.reason}</p>
                   </div>
                 ))}
               </div>
             </article>
           ))}
+          </div>
         </section>
       )}
 
       {mapping.trace.length > 0 && (
-        <section className="signal-card overflow-hidden">
-          <div className="border-b border-white/8 p-5">
-            <h3 className="text-sm font-semibold">증거별 검색 후보와 선택</h3>
-            <p className="mt-1 text-xs text-muted-foreground">초록색이 LLM이 고르고 검증을 통과한 기법입니다. 선택이 없으면 후보 중 근거가 맞는 기법이 없다고 판단(ABSTAIN)한 것입니다.</p>
+        <section className="signal-card overflow-hidden border-cyan-400/15">
+          <div className="border-b border-cyan-400/12 bg-cyan-400/[0.025] p-5">
+            <div className="flex items-center gap-2 text-cyan-200"><Fingerprint className="size-4" /><h3 className="text-sm font-semibold">증거별 검색 후보와 선택</h3></div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><b aria-hidden="true" className="text-sm leading-none text-emerald-300">○</b>초록색 증거: 매핑 기법 있음</span>
+              <span className="flex items-center gap-1.5"><b aria-hidden="true" className="text-sm leading-none text-amber-300">×</b>주황색 증거: 매핑 기법 없음</span>
+              <span className="flex items-center gap-1.5"><i className="size-2 rounded-full border border-emerald-400 bg-emerald-400/15" />초록색 기법: 최종 선택·검증 통과</span>
+            </div>
           </div>
+          <div className="grid gap-2 border-b border-white/8 bg-black/15 px-4 py-2.5 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-slate-500 sm:grid-cols-[7rem_minmax(0,1fr)]"><span>증거</span><span>Top 10 후보 기법</span></div>
           <div className="divide-y divide-white/7">
             {mapping.trace.map((unit) => (
               <div key={unit.evidenceId} className="grid gap-2 p-4 sm:grid-cols-[7rem_minmax(0,1fr)]">
-                <div><p className="font-mono text-xs text-cyan-300">{unit.evidenceId}</p>{!unit.selected.length && <p className="mt-1 text-[0.7rem] text-amber-300">선택 없음</p>}</div>
+                <div><p className={`flex items-center gap-1.5 font-mono text-xs font-semibold ${unit.selected.length ? "text-emerald-300" : "text-amber-300"}`}><span aria-hidden="true" className="text-sm leading-none">{unit.selected.length ? "○" : "×"}</span>{unit.evidenceId}</p></div>
                 <div className="flex flex-wrap gap-1.5">{unit.candidates.map((candidate) => <TechniqueLink key={candidate} id={candidate} selected={unit.selected.includes(candidate)} />)}</div>
               </div>
             ))}
@@ -1002,9 +1046,9 @@ function AttackMappingPanel({ incident, timezone }: { incident: Incident; timezo
       )}
 
       {(mapping.exclusions.length > 0 || mapping.rejected.length > 0) && (
-        <section className="grid gap-4 lg:grid-cols-2">
-          {mapping.exclusions.length > 0 && <article className="signal-card p-5"><h3 className="text-sm font-semibold">매핑에서 뺀 증거</h3><ul className="mt-3 space-y-2 text-sm text-muted-foreground">{mapping.exclusions.map((item) => <li key={item.evidenceId}><span className="font-mono text-xs text-slate-300">{item.evidenceId}</span> — {item.reasons.map((code) => exclusionReasonLabel[code] ?? code).join(", ")}</li>)}</ul></article>}
-          {mapping.rejected.length > 0 && <article className="signal-card p-5"><h3 className="text-sm font-semibold">검증에서 거부된 선택</h3><ul className="mt-3 space-y-2 text-sm text-muted-foreground">{mapping.rejected.map((item, index) => <li key={`${item.evidenceId}-${index}`} className="font-mono text-xs">{item.evidenceId} {item.value} — {item.code}</li>)}</ul></article>}
+        <section className="rounded-xl border border-white/7 bg-black/10 p-4">
+          {mapping.exclusions.length > 0 && <div><h3 className="text-sm font-semibold text-slate-300">매핑에서 뺀 증거</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">원본 참조가 없거나 검증에 문제가 있거나, 조회 결과가 비어 있어 ATT&CK 행위를 직접 뒷받침하기 어려운 증거입니다.</p><div className="mt-3 flex flex-wrap gap-2">{mapping.exclusions.map((item) => <span key={item.evidenceId} title={item.reasons.map((code) => exclusionReasonLabel[code] ?? code).join(", ")} className="rounded-md border border-slate-500/15 bg-slate-500/[0.04] px-2.5 py-1 font-mono text-[0.7rem] text-slate-500">{item.evidenceId}</span>)}</div></div>}
+          {mapping.rejected.length > 0 && <div className={`${mapping.exclusions.length ? "mt-4 border-t border-white/7 pt-4" : ""}`}><h3 className="text-sm font-semibold text-slate-300">검증에서 거부된 선택</h3><div className="mt-3 flex flex-wrap gap-2">{mapping.rejected.map((item, index) => <span key={`${item.evidenceId}-${index}`} className="rounded-md border border-rose-400/12 bg-rose-400/[0.035] px-2.5 py-1 font-mono text-[0.7rem] text-rose-300/70">{item.evidenceId} · {item.value} · {item.code}</span>)}</div></div>}
         </section>
       )}
     </div>
@@ -1059,7 +1103,8 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
           <TabsList variant="line" className="incident-tabs-list w-full justify-start overflow-x-auto border-b border-white/8 bg-[#0b121c] px-5 py-2">
             <TabsTrigger value="summary" className="flex-none px-4">판정 요약</TabsTrigger>
             <TabsTrigger value="evidence" className="flex-none px-4">타임라인·증거</TabsTrigger>
-            <TabsTrigger value="extensions" className="flex-none px-4">ATT&CK·대응</TabsTrigger>
+            <TabsTrigger value="attack" className="flex-none px-4">ATT&CK</TabsTrigger>
+            <TabsTrigger value="response" className="flex-none px-4">대응</TabsTrigger>
             <TabsTrigger value="diagnostics" className="flex-none px-4">조사 범위</TabsTrigger>
           </TabsList>
 
@@ -1133,15 +1178,18 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
               </div>
             </TabsContent>
 
-            <TabsContent value="extensions" className="space-y-5">
+            <TabsContent value="attack" className="space-y-5">
               <AttackMappingPanel incident={incident} timezone={timezone} />
+            </TabsContent>
+
+            <TabsContent value="response" className="space-y-5">
               <div className="grid gap-5 lg:grid-cols-2">
                 {[
                   { icon: Sparkles, title: "대응 생성", step: "⑧", text: "권고 조치, 영향 범위, 롤백 정보가 이곳에 표시됩니다." },
                   { icon: Waypoints, title: "자율성 레벨", step: "⑨", text: "L0/L1/L2와 실행·승인 상태가 이곳에 표시됩니다." },
                 ].map((item) => { const Icon = item.icon; return <article key={item.title} className="signal-card min-h-56 p-5"><div className="flex items-center justify-between"><div className="grid size-10 place-items-center rounded-lg border border-violet-400/20 bg-violet-400/8 text-violet-300"><Icon className="size-5"/></div><span className="font-mono text-xs text-slate-400">단계 {item.step}</span></div><h3 className="mt-5 font-semibold">{item.title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{item.text}</p><Badge variant="outline" className="mt-5 border-slate-600/40 text-slate-400">산출물 연결 예정</Badge></article>; })}
               </div>
-              <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-5 text-sm leading-6 text-cyan-100/70">조사 에이전트와 ATT&CK 매핑 결과가 연결되어 있습니다. 대응 생성·자율성 단계는 스키마가 확정되면 이 영역에 데이터만 연결하도록 자리를 분리했습니다.</div>
+              <div className="rounded-xl border border-slate-500/15 bg-slate-500/[0.035] p-5 text-sm leading-6 text-slate-300">대응 생성과 자율성 단계는 추후 산출물 스키마가 확정되면 이 탭에 연결할 예정입니다.</div>
             </TabsContent>
 
             <TabsContent value="diagnostics" className="space-y-5">
@@ -1286,6 +1334,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [newIncidentCount, setNewIncidentCount] = useState(0);
   const [announcement, setAnnouncement] = useState("");
+  const [incidentFilterPreset, setIncidentFilterPreset] = useState<IncidentFilterPreset>({ revision: 0, verdict: "ALL", severity: "ALL" });
   const dashboardDataRef = useRef<DashboardData>(resultData);
   const requestRef = useRef<AbortController | null>(null);
   const requestRunningRef = useRef(false);
@@ -1366,6 +1415,13 @@ export default function Home() {
     if (nextView === "incidents") setNewIncidentCount(0);
   };
 
+  const openFilteredIncidents = (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => {
+    setIncidentFilterPreset((current) => ({ ...filter, revision: current.revision + 1 }));
+    setView("incidents");
+    setNewIncidentCount(0);
+    setAnnouncement("선택한 조건으로 사건 목록을 열었습니다.");
+  };
+
   const statusLabel = syncStatus === "live" ? "실시간 연결" : syncStatus === "retrying" ? "재연결 중" : "연결 중";
   const StatusIcon = syncStatus === "retrying" ? WifiOff : Radio;
 
@@ -1434,8 +1490,8 @@ export default function Home() {
         </header>
 
         <div id="dashboard-content" className="mx-auto max-w-[1800px] p-4 pb-10 sm:p-6 2xl:p-8" tabIndex={-1}>
-          {view === "overview" && <Overview incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} timezone={timezone} />}
-          {view === "incidents" && <IncidentsView incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenResult={openIncidentByKey} timezone={timezone} />}
+          {view === "overview" && <Overview incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenFilteredIncidents={openFilteredIncidents} timezone={timezone} />}
+          {view === "incidents" && <IncidentsView key={`incidents-${incidentFilterPreset.revision}`} incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenResult={openIncidentByKey} filterPreset={incidentFilterPreset} timezone={timezone} />}
           {view === "operations" && <Operations incidents={incidents} />}
           {view === "pipeline" && <Pipeline />}
         </div>
