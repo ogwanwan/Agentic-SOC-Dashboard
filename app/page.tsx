@@ -769,24 +769,47 @@ function IncidentList({ incidents, onOpenIncident, filterPreset, timezone }: { i
 
 function DetectionTable({ detections, onOpenResult, timezone }: { detections: Detection[]; onOpenResult: (resultKey: string) => void; timezone: Timezone }) {
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState("score");
   const [priority, setPriority] = useState("ALL");
   const [state, setState] = useState("ALL");
-  const filtered = useMemo(() => detections.filter((item) => {
-    const text = `${item.incidentId} ${item.incidentKey} ${item.entityValue} ${item.rules.join(" ")} ${item.llmReason}`.toLowerCase();
-    return text.includes(query.toLowerCase())
-      && (priority === "ALL" || (priority === "P1P2" ? ["P1", "P2"].includes(item.priority) : item.priority === priority))
-      && (state === "ALL" || item.state === state);
-  }), [detections, priority, query, state]);
+  const filtered = useMemo(() => {
+    const timestampOf = (item: Detection) => {
+      const timestamp = new Date(item.updatedAt).getTime();
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
+    const tieBreak = (a: Detection, b: Detection) => b.score - a.score
+      || timestampOf(b) - timestampOf(a)
+      || a.incidentId.localeCompare(b.incidentId);
+
+    return detections.filter((item) => {
+      const text = `${item.incidentId} ${item.incidentKey} ${item.entityValue} ${item.rules.join(" ")} ${item.llmReason}`.toLowerCase();
+      return text.includes(query.toLowerCase())
+        && (priority === "ALL" || (priority === "P1P2" ? ["P1", "P2"].includes(item.priority) : item.priority === priority))
+        && (state === "ALL" || item.state === state);
+    }).sort((a, b) => {
+      if (sortBy === "time") return timestampOf(b) - timestampOf(a) || tieBreak(a, b);
+      return tieBreak(a, b);
+    });
+  }, [detections, priority, query, sortBy, state]);
 
   return (
     <section className="signal-card overflow-hidden">
       <div className="border-b border-white/8 p-5 sm:p-6">
         <PanelTitle icon={Database} title="탐지·대기열" description={`1차 탐지 DB의 사건 ${filtered.length}건 표시 · 전체 ${detections.length}건 (조사 전 사건 포함)`} trailing={<TriageLegend />} />
-        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_170px_190px]">
+        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_150px_170px_190px]">
           <div className="relative">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input aria-label="탐지 사건 검색" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="IP, pid, 사건 ID, 탐지 룰, Haiku 의견 검색" className="h-11 border-white/10 bg-black/15 pl-10" />
           </div>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger aria-label="탐지 사건 정렬" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
+              <SelectValue placeholder="정렬 선택" />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="border-white/10 bg-[#0b171d] font-sans text-slate-200 shadow-2xl shadow-black/50">
+              <SelectItem value="score">점수순</SelectItem>
+              <SelectItem value="time">시간대순</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={priority} onValueChange={setPriority}>
             <SelectTrigger aria-label="우선순위 필터" className="h-11 w-full border-white/10 bg-black/15 font-medium text-slate-200 hover:border-cyan-400/25 hover:bg-cyan-400/[0.035]">
               <SelectValue placeholder="우선순위 선택" />
@@ -1411,6 +1434,13 @@ export default function Home() {
   };
 
   const changeView = (nextView: View) => {
+    if (view === "incidents" && nextView !== "incidents") {
+      setIncidentFilterPreset((current) => ({
+        revision: current.revision + 1,
+        verdict: "ALL",
+        severity: "ALL",
+      }));
+    }
     setView(nextView);
     if (nextView === "incidents") setNewIncidentCount(0);
   };
@@ -1432,7 +1462,7 @@ export default function Home() {
 
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-72 border-r border-border bg-sidebar/95 backdrop-blur-xl lg:flex lg:flex-col">
         <div className="flex h-20 items-center gap-3 border-b border-border px-6">
-          <div className="brand-mark grid size-10 place-items-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-300"><Shield aria-hidden="true" className="size-5" /></div>
+          <img src="/ssoc-logo.png" alt="" aria-hidden="true" className="brand-logo size-12 shrink-0 object-contain" />
           <div><p className="text-xl font-black tracking-[0.16em]">SSOC</p><p className="text-xs text-muted-foreground">Security Operations Center</p></div>
         </div>
         <div className="px-6 pb-2 pt-6 text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-slate-500">관제 작업 공간</div>
@@ -1468,7 +1498,7 @@ export default function Home() {
         <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur-xl">
           <div className="mx-auto flex min-h-20 max-w-[1800px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 2xl:px-8">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="brand-mark grid size-10 shrink-0 place-items-center rounded-xl border border-cyan-400/20 bg-cyan-400/8 text-cyan-300 lg:hidden"><Shield aria-hidden="true" className="size-4" /></div>
+              <img src="/ssoc-logo.png" alt="" aria-hidden="true" className="brand-logo size-10 shrink-0 object-contain lg:hidden" />
               <div className="min-w-0"><p className="truncate text-xs font-medium text-muted-foreground">{active.description}</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{active.label}</h1></div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
