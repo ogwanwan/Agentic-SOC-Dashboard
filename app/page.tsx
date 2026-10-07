@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bot,
   BrainCircuit,
+  createLucideIcon,
   ChevronRight,
   CircleDashed,
   Clock3,
@@ -61,10 +62,21 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import resultData from "@/data/incidents.generated.json";
+// 대응 조치 탭은 완성 전까지 임시 비활성화합니다. 관련 구현은 보존합니다.
+// import { ResponseCenter } from "@/components/response-center";
+import type { ResponseData } from "@/lib/response";
+
+const ChartDonut = createLucideIcon("chart-donut", [
+  // 기본 Lucide 원형 아이콘과 동일한 바깥 여백과 도형 범위를 사용합니다.
+  ["circle", { cx: 12, cy: 12, r: 10, key: "outer" }],
+  ["circle", { cx: 12, cy: 12, r: 6, key: "inner" }],
+  ["path", { d: "M12 2v4M22 12h-4M4.93 19.07l2.83-2.83", key: "segments" }],
+]);
 
 type Incident = (typeof resultData.incidents)[number];
 type DashboardData = typeof resultData;
 type View = "overview" | "incidents" | "operations" | "pipeline";
+// 대응 조치 탭 재활성화 시 View에 "responses"를 추가합니다.
 type Timezone = "UTC" | "KST";
 type SyncStatus = "connecting" | "live" | "retrying";
 type IncidentVerdictFilter = "ALL" | "THREAT_CONFIRMED" | "FALSE_POSITIVE" | "INCONCLUSIVE";
@@ -73,6 +85,11 @@ type IncidentFilterPreset = {
   revision: number;
   verdict: IncidentVerdictFilter;
   severity: IncidentSeverityFilter;
+};
+type IncidentViewPreset = {
+  revision: number;
+  tab: "results" | "detections";
+  detectionState: string;
 };
 
 // ATT&CK 매핑 결과(scripts/sync-results.mjs toAttackMapping). 매핑 전 결과에는 없으므로
@@ -94,6 +111,10 @@ type AttackMapping = {
 
 function attackMappingOf(incident: Incident): AttackMapping | null {
   return (incident as Incident & { attackMapping?: AttackMapping | null }).attackMapping ?? null;
+}
+
+function responseOf(incident: Incident): ResponseData | null {
+  return (incident as Incident & { response?: ResponseData | null }).response ?? null;
 }
 
 function evidenceMappingOf(item: object): EvidenceMapping {
@@ -226,6 +247,7 @@ function attackUrl(techniqueId: string) {
 const navigation = [
   { id: "overview" as View, label: "상황 개요", description: "우선순위와 위협 추이", icon: LayoutDashboard },
   { id: "incidents" as View, label: "사건", description: "조사 결과와 근거", icon: ListTree },
+  // { id: "responses" as View, label: "대응 조치", description: "권고·적용·검증", icon: ShieldCheck },
   { id: "pipeline" as View, label: "파이프라인", description: "분석 단계와 연결 상태", icon: GitBranch },
   { id: "operations" as View, label: "운영 상태", description: "성능과 데이터 품질", icon: Activity },
 ];
@@ -349,7 +371,7 @@ function PanelTitle({
     <div className="flex items-start justify-between gap-4">
       <div className="flex items-start gap-3">
         <div className="grid size-9 shrink-0 place-items-center rounded-lg border border-cyan-400/20 bg-cyan-400/8 text-cyan-300">
-          <Icon className="size-4" />
+          <Icon size={16} strokeWidth={2} className="size-4 shrink-0" />
         </div>
         <div>
           <h2 className="font-semibold tracking-tight">{title}</h2>
@@ -393,44 +415,161 @@ function TriageLegend({ parts }: { parts?: TriageParts | null }) {
   );
 }
 
-function PipelineFunnel({ pipeline }: { pipeline: PipelineData | null }) {
+type OverviewCounts = {
+  all: number;
+  threat: number;
+  benign: number;
+  urgent: number;
+  inconclusive: number;
+  verified: number;
+  responses: number;
+};
+
+function PipelineFunnel({
+  pipeline,
+  counts,
+  onOpenFilteredIncidents,
+  onOpenDetectionQueue,
+}: {
+  pipeline: PipelineData | null;
+  counts: OverviewCounts;
+  onOpenFilteredIncidents: (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => void;
+  onOpenDetectionQueue: () => void;
+}) {
   if (!pipeline?.enabled) return null;
   if (!pipeline.connected) {
     return <section className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100/80"><span className="font-semibold text-amber-300">1차 탐지 DB 미연결</span> · {pipeline.error || "SSOC_DB_PATH 경로를 확인하세요."} 조사 결과는 그대로 표시됩니다.</section>;
   }
   const f = pipeline.funnel;
-  const stages = [
-    { label: "탐지 사건", value: f.detected, color: "text-slate-100", notes: [`P1 ${f.byPriority.P1 ?? 0} · P2 ${f.byPriority.P2 ?? 0}`, `P3 ${f.byPriority.P3 ?? 0} · P4 ${f.byPriority.P4 ?? 0}`, ...(f.legacy ? [`이전 기록 ${f.legacy}건 제외`] : [])] },
-    { label: "조사 대상", value: f.targeted, color: "text-orange-300", notes: [`Haiku 오탐 제외 ${f.llmFiltered}`, `대기 ${f.queued} · 조사 중 ${f.investigating}`] },
-    { label: "조사 완료", value: f.investigated, color: "text-cyan-300", notes: [`DB와 연결 ${pipeline.linked}건`, ...(f.resultUnmarked ? [`DB 상태 미반영 ${f.resultUnmarked}건`] : [])] },
-    { label: "위협 확정", value: f.threat, color: "text-rose-300", notes: [`오탐 ${f.falsePositive} · 판단 불가 ${f.inconclusive}`] },
-    { label: "ATT&CK 매핑", value: f.mapped, color: "text-violet-300", notes: ["기법 1개 이상"] },
-  ];
+  const targetConversionRate = f.detected > 0 ? (f.targeted / f.detected) * 100 : 0;
+  const completionRate = f.targeted > 0 ? (f.investigated / f.targeted) * 100 : 0;
+  const isStalled = f.queued > 0 && f.investigating === 0;
+  const investigationState = isStalled ? "처리 정체" : f.investigating > 0 ? "처리 중" : "대기 없음";
+  const InvestigationStateIcon = isStalled ? AlertTriangle : Activity;
+  const outcomeTiles = [
+    { label: "위협 확인", value: counts.threat, icon: ShieldAlert, color: "text-rose-300", style: "border-rose-400/20 bg-rose-400/[0.05] hover:border-rose-400/35", filter: { verdict: "THREAT_CONFIRMED", severity: "ALL" } },
+    { label: "비위협", value: counts.benign, icon: ShieldCheck, color: "text-[#55d58b]", style: "border-[#55d58b]/20 bg-[#55d58b]/[0.05] hover:border-[#55d58b]/35", filter: { verdict: "FALSE_POSITIVE", severity: "ALL" } },
+    { label: "추가 조사", value: counts.inconclusive, icon: CircleDashed, color: "text-amber-300", style: "border-amber-400/20 bg-amber-400/[0.05] hover:border-amber-400/35", filter: { verdict: "INCONCLUSIVE", severity: "ALL" } },
+  ] as const;
+
   return (
     <section className="signal-card p-5 sm:p-6">
-      <PanelTitle icon={Waypoints} title="탐지에서 판정까지" description="1차 탐지 DB의 사건이 트리아지·조사 에이전트·ATT&CK 매핑을 거치며 어떻게 걸러졌는지 보여 줍니다." />
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {stages.map((stage, index) => (
-          <div key={stage.label} className="relative rounded-xl border border-white/8 bg-white/[0.025] p-4">
-            <p className="text-xs font-medium text-muted-foreground">{index + 1}. {stage.label}</p>
-            <p className={`mt-3 font-mono text-3xl font-semibold ${stage.color}`}>{stage.value}</p>
-            <div className="mt-3 space-y-1 text-xs text-muted-foreground">{stage.notes.map((note) => <p key={note}>{note}</p>)}</div>
-            {index < stages.length - 1 && <ArrowRight aria-hidden="true" className="absolute -right-[0.7rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 xl:block" />}
+      <PanelTitle
+        icon={Waypoints}
+        title="탐지에서 판정까지"
+        description="1차 탐지 DB의 사건이 트리아지와 조사 에이전트를 거쳐 최종 판정되고, ATT&CK 매핑과 대응 권고로 이어지는 전체 흐름입니다."
+      />
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,0.95fr)]">
+        <article className="relative flex min-h-56 flex-col rounded-xl border border-white/8 bg-white/[0.025] p-4">
+          <div className="flex items-center gap-3 pr-20">
+            <span className="grid size-10 place-items-center rounded-full border border-slate-100/35 bg-slate-100/[0.04] text-slate-100">
+              <Search aria-hidden="true" className="size-5" />
+            </span>
+            <h3 className="text-sm font-semibold text-slate-100">탐지 사건</h3>
           </div>
-        ))}
+          <strong className="absolute right-4 top-4 font-mono text-4xl font-semibold tracking-tight text-slate-100">{f.detected}</strong>
+          <div className="mt-4 min-w-0">
+            <p className="text-[0.68rem] font-semibold tracking-[0.12em] text-slate-400">우선순위</p>
+            <div className="mt-1 space-y-0.5 font-mono text-xs text-slate-300">
+              {(["P1", "P2", "P3", "P4"] as const).map((priority) => (
+                <div key={priority} className="flex items-center justify-between border-b border-white/[0.05] py-0.5 last:border-b-0">
+                  <span>{priority}</span>
+                  <strong className="font-semibold text-slate-100">{f.byPriority[priority] ?? 0}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+          {f.legacy > 0 && <p className="mt-1.5 text-xs text-slate-500">이전 기록 {f.legacy}건 제외</p>}
+          <ArrowRight aria-hidden="true" className="absolute -right-[0.7rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 xl:block" />
+        </article>
+
+        <article className="relative flex min-h-56 flex-col rounded-xl border border-white/8 bg-white/[0.025] p-4">
+          <div className="flex items-center gap-3 pr-20">
+            <span className="grid size-10 place-items-center rounded-full border border-orange-400/25 bg-orange-400/[0.06] text-orange-300">
+              <Bot aria-hidden="true" className="size-5" />
+            </span>
+            <h3 className="text-sm font-semibold text-slate-100">조사 대상</h3>
+          </div>
+          <strong className="absolute right-4 top-4 font-mono text-4xl font-semibold tracking-tight text-orange-300">{f.targeted}</strong>
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[0.68rem] font-semibold tracking-[0.12em] text-slate-400">전환율</span>
+              <strong className="font-mono text-xs font-semibold text-orange-200">{targetConversionRate.toFixed(1)}%</strong>
+            </div>
+            <button type="button" onClick={onOpenDetectionQueue} className="mt-2 flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-orange-400/20 bg-orange-400/[0.05] px-2.5 text-xs text-orange-200 transition hover:border-orange-400/40 hover:bg-orange-400/[0.09]" aria-label="탐지 대기열의 조사 대기 사건 확인">
+              <span className="flex min-w-0 items-center gap-1.5"><InvestigationStateIcon aria-hidden="true" className="size-3.5 shrink-0" /><span className="truncate">대기 {f.queued} · 조사 중 {f.investigating}</span></span>
+              <span className="shrink-0 font-semibold">{investigationState}</span>
+            </button>
+            <div className="mt-2.5 flex items-center justify-between text-xs text-muted-foreground">
+              <span>조사 완료 {f.investigated}/{f.targeted}</span>
+              <strong className="font-mono text-orange-200">{completionRate.toFixed(1)}%</strong>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full border border-orange-400/15 bg-black/25" role="progressbar" aria-label="조사 완료율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, completionRate)}>
+              <div className="h-full rounded-full bg-orange-300 transition-[width]" style={{ width: `${Math.min(100, completionRate)}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Sonnet 오탐 제외 {f.llmFiltered}건</p>
+          </div>
+          <ArrowRight aria-hidden="true" className="absolute -right-[0.7rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 xl:block" />
+        </article>
+
+        <article className="relative min-h-56 rounded-xl border border-white/8 bg-white/[0.025] p-4">
+          <div className="flex items-center gap-3 pr-16">
+            <span className="grid size-10 place-items-center rounded-full border border-cyan-400/25 bg-cyan-400/[0.06] text-cyan-300">
+              <Activity aria-hidden="true" className="size-5" />
+            </span>
+            <h3 className="text-sm font-semibold text-slate-100">조사 완료</h3>
+          </div>
+          <button type="button" onClick={() => onOpenFilteredIncidents({ verdict: "ALL", severity: "ALL" })} className="absolute right-4 top-4 font-mono text-4xl font-semibold tracking-tight text-cyan-300 transition hover:text-cyan-200" aria-label={`전체 조사 ${counts.all}건 사건 목록 보기`}>{counts.all}</button>
+          <div className="mt-4 grid grid-cols-3 gap-1.5">
+            {outcomeTiles.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button key={item.label} type="button" onClick={() => onOpenFilteredIncidents(item.filter)} className={`min-w-0 rounded-lg border p-2.5 text-left transition ${item.style}`} aria-label={`${item.label} ${item.value}건 사건 목록 보기`}>
+                  <span className={`flex items-center gap-1 text-[0.68rem] font-medium ${item.color}`}><Icon aria-hidden="true" className="size-3.5 shrink-0" /><span className="whitespace-nowrap">{item.label}</span></span>
+                  <strong className={`mt-2 block font-mono text-2xl font-semibold ${item.color}`}>{item.value}</strong>
+                </button>
+              );
+            })}
+          </div>
+          <ArrowRight aria-hidden="true" className="absolute -right-[0.7rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 xl:block" />
+        </article>
+
+        <article className="relative min-h-56 rounded-xl border border-white/8 bg-white/[0.025] p-4">
+          <div className="flex items-center gap-3 pr-16">
+            <span className="grid size-10 place-items-center rounded-full border border-violet-400/25 bg-violet-400/[0.06] text-violet-300">
+              <ShieldCheck aria-hidden="true" className="size-5" />
+            </span>
+            <h3 className="text-sm font-semibold text-slate-100">최종 판정</h3>
+          </div>
+          <strong className="absolute right-4 top-4 font-mono text-4xl font-semibold tracking-tight text-violet-300">{counts.all}</strong>
+          <div className="mt-4 grid grid-cols-2 gap-1.5">
+            <div className="min-w-0 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-2.5 text-left">
+              <span className="flex items-center gap-1 text-[0.68rem] font-medium text-violet-300"><Network aria-hidden="true" className="size-3.5 shrink-0" /><span className="whitespace-nowrap">ATT&amp;CK 매핑</span></span>
+              <strong className="mt-2 block font-mono text-2xl font-semibold text-violet-300">{f.mapped}</strong>
+            </div>
+            <div className="min-w-0 rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-2.5 text-left">
+              <span className="flex items-center gap-1 text-[0.68rem] font-medium text-violet-300"><Wrench aria-hidden="true" className="size-3.5 shrink-0" /><span className="whitespace-nowrap">대응 권고 생성</span></span>
+              <strong className="mt-2 block font-mono text-2xl font-semibold text-violet-300">{counts.responses}</strong>
+            </div>
+          </div>
+        </article>
       </div>
+
       {pipeline.linked < f.investigated && <p className="mt-4 text-xs leading-5 text-amber-300/80">조사 결과 {f.investigated}건 중 {f.investigated - pipeline.linked}건은 DB에서 같은 사건을 찾지 못했습니다. 결과 폴더(SSOC_RESULTS_DIR)와 DB(SSOC_DB_PATH)가 같은 파이프라인 실행의 것인지 확인하세요.</p>}
     </section>
   );
 }
 
-function Overview({ incidents, pipeline, onOpenIncident, onOpenFilteredIncidents, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenFilteredIncidents: (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => void; timezone: Timezone }) {
+function Overview({ incidents, pipeline, onOpenIncident, onOpenFilteredIncidents, onOpenDetectionQueue, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenFilteredIncidents: (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => void; onOpenDetectionQueue: () => void; timezone: Timezone }) {
   const counts = useMemo(() => ({
     all: incidents.length,
     threat: incidents.filter((item) => item.verdict === "THREAT_CONFIRMED").length,
+    benign: incidents.filter((item) => item.verdict === "FALSE_POSITIVE").length,
     urgent: incidents.filter((item) => ["CRITICAL", "HIGH"].includes(item.severity)).length,
     inconclusive: incidents.filter((item) => item.verdict === "INCONCLUSIVE").length,
     verified: incidents.filter((item) => item.provenance.status === "passed").length,
+    responses: incidents.filter((item) => Boolean(responseOf(item))).length,
   }), [incidents]);
 
   const timelineData = useMemo(() => {
@@ -472,39 +611,9 @@ function Overview({ incidents, pipeline, onOpenIncident, onOpenFilteredIncidents
   const averageConfidence = incidents.length
     ? incidents.reduce((sum, item) => sum + item.investigationConfidence, 0) / incidents.length
     : 0;
-  const cards = [
-    { label: "전체 조사", value: counts.all, note: "연결된 결과", color: "text-cyan-300", tone: "all", icon: Layers3, filter: { verdict: "ALL", severity: "ALL" } },
-    { label: "긴급 · 높음", value: counts.urgent, note: "우선 검토", color: "text-orange-300", tone: "urgent", icon: AlertTriangle, filter: { verdict: "ALL", severity: "URGENT" } },
-    { label: "위협 확인", value: counts.threat, note: "조치 후보", color: "text-rose-300", tone: "threat", icon: ShieldAlert, filter: { verdict: "THREAT_CONFIRMED", severity: "ALL" } },
-    { label: "추가 조사", value: counts.inconclusive, note: "결론 불충분", color: "text-amber-300", tone: "inconclusive", icon: CircleDashed, filter: { verdict: "INCONCLUSIVE", severity: "ALL" } },
-  ];
-
   return (
     <div className="space-y-5">
-      <PipelineFunnel pipeline={pipeline} />
-      <section className="grid grid-cols-2 gap-3 2xl:grid-cols-4" aria-label="핵심 보안 지표">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <button
-              type="button"
-              key={card.label}
-              onClick={() => onOpenFilteredIncidents(card.filter as Pick<IncidentFilterPreset, "verdict" | "severity">)}
-              className={`signal-card overview-metric overview-metric--${card.tone} p-4 text-left sm:p-5`}
-              aria-label={`${card.label} ${card.value}건 사건 목록 보기`}
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
-                <span className="overview-metric__icon"><Icon aria-hidden="true" className={`size-4 ${card.color}`} /></span>
-              </div>
-              <div className="mt-5 flex flex-wrap items-end justify-between gap-2">
-                <strong className={`font-mono text-3xl font-semibold tracking-tight ${card.color}`}>{card.value}</strong>
-                <span className="text-xs text-muted-foreground sm:text-sm">{card.note}</span>
-              </div>
-            </button>
-          );
-        })}
-      </section>
+      <PipelineFunnel pipeline={pipeline} counts={counts} onOpenFilteredIncidents={onOpenFilteredIncidents} onOpenDetectionQueue={onOpenDetectionQueue} />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
         <article className="signal-card overflow-hidden">
@@ -540,7 +649,7 @@ function Overview({ incidents, pipeline, onOpenIncident, onOpenFilteredIncidents
         </article>
 
         <article className="signal-card p-5 sm:p-6">
-          <PanelTitle icon={Activity} title="심각도 분포" description="현재 연결된 최종 판정" />
+          <PanelTitle icon={ChartDonut} title="심각도 분포" description="현재 연결된 최종 판정" />
           {severityData.length ? (
             <>
               <div className="mt-4 grid min-h-60 grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-1">
@@ -767,11 +876,11 @@ function IncidentList({ incidents, onOpenIncident, filterPreset, timezone }: { i
   );
 }
 
-function DetectionTable({ detections, onOpenResult, timezone }: { detections: Detection[]; onOpenResult: (resultKey: string) => void; timezone: Timezone }) {
+function DetectionTable({ detections, onOpenResult, timezone, initialState = "ALL" }: { detections: Detection[]; onOpenResult: (resultKey: string) => void; timezone: Timezone; initialState?: string }) {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("score");
   const [priority, setPriority] = useState("ALL");
-  const [state, setState] = useState("ALL");
+  const [state, setState] = useState(initialState);
   const filtered = useMemo(() => {
     const timestampOf = (item: Detection) => {
       const timestamp = new Date(item.updatedAt).getTime();
@@ -889,8 +998,8 @@ function DetectionTable({ detections, onOpenResult, timezone }: { detections: De
   );
 }
 
-function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, filterPreset, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenResult: (resultKey: string) => void; filterPreset: IncidentFilterPreset; timezone: Timezone }) {
-  const [tab, setTab] = useState<"results" | "detections">("results");
+function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, filterPreset, viewPreset, timezone }: { incidents: Incident[]; pipeline: PipelineData | null; onOpenIncident: (item: Incident) => void; onOpenResult: (resultKey: string) => void; filterPreset: IncidentFilterPreset; viewPreset: IncidentViewPreset; timezone: Timezone }) {
+  const [tab, setTab] = useState<"results" | "detections">(viewPreset.tab);
   const hasDetections = Boolean(pipeline?.enabled && pipeline.connected);
   if (!hasDetections || !pipeline) return <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} filterPreset={filterPreset} timezone={timezone} />;
   return (
@@ -902,7 +1011,7 @@ function IncidentsView({ incidents, pipeline, onOpenIncident, onOpenResult, filt
       </div>
       {tab === "results"
         ? <IncidentList incidents={incidents} onOpenIncident={onOpenIncident} filterPreset={filterPreset} timezone={timezone} />
-        : <DetectionTable detections={pipeline.detections} onOpenResult={onOpenResult} timezone={timezone} />}
+        : <DetectionTable detections={pipeline.detections} onOpenResult={onOpenResult} timezone={timezone} initialState={viewPreset.detectionState} />}
     </div>
   );
 }
@@ -1103,7 +1212,128 @@ function TriageCard({ incident, timezone }: { incident: Incident; timezone: Time
   );
 }
 
-function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: Incident | null; open: boolean; onOpenChange: (open: boolean) => void; timezone: Timezone }) {
+const autonomyStyle: Record<string, string> = {
+  L0: "border-amber-400/25 bg-amber-400/8 text-amber-200",
+  L1: "border-violet-400/25 bg-violet-400/8 text-violet-200",
+  L2: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200",
+};
+
+const autonomyTextStyle: Record<string, string> = {
+  L0: "text-amber-300",
+  L1: "text-violet-300",
+  L2: "text-cyan-300",
+};
+
+const riskLabel: Record<string, string> = {
+  LOW: "낮음",
+  MED: "중간",
+  MEDIUM: "중간",
+  HIGH: "높음",
+};
+
+// 사건 심각도 색상 중 서로 가까운 HIGH(주황)는 빼고,
+// 조치 위험도 3단계를 CRITICAL(장미) · MEDIUM(황색) · LOW(청색)에 대응시킵니다.
+const riskStyle: Record<string, string> = {
+  HIGH: severityStyle.CRITICAL,
+  MED: severityStyle.MEDIUM,
+  MEDIUM: severityStyle.MEDIUM,
+  LOW: severityStyle.LOW,
+};
+
+function ResponsePanel({ incident }: { incident: Incident }) {
+  const response = responseOf(incident);
+  if (!response) {
+    return (
+      <section className="signal-card p-8 text-center">
+        <WifiOff aria-hidden="true" className="mx-auto size-7 text-slate-500" />
+        <h3 className="mt-4 text-sm font-semibold text-slate-200">연결된 대응 권고가 없습니다</h3>
+        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">이 사건과 일치하는 response JSON이 아직 생성되지 않았습니다.</p>
+      </section>
+    );
+  }
+
+  const immediateCount = response.actions.filter((action) => action.category === "immediate").length;
+  const verifyCount = response.actions.filter((action) => action.category === "verify_needed").length;
+  const actions = response.actions.slice().sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
+
+  return (
+    <div className="space-y-5">
+      <section className="signal-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="border-emerald-400/25 bg-emerald-400/8 text-emerald-200">{response.statusLabel}</Badge>
+              <span className="text-xs text-muted-foreground">사건별 대응 결과</span>
+            </div>
+            <h3 className="mt-4 text-base font-semibold text-slate-100">권고 조치 {response.actions.length}건</h3>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{response.summary || "조사 판정과 ATT&CK 매핑을 바탕으로 생성된 최종 대응 권고입니다."}</p>
+          </div>
+          <div className="grid min-w-48 grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg border border-rose-400/15 bg-rose-400/[0.04] px-4 py-3"><p className="font-mono text-xl text-rose-200">{immediateCount}</p><p className="mt-1 text-xs text-muted-foreground">즉시 조치</p></div>
+            <div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-4 py-3"><p className="font-mono text-xl text-amber-200">{verifyCount}</p><p className="mt-1 text-xs text-muted-foreground">확인 필요</p></div>
+          </div>
+        </div>
+        {response.autonomyLegend && Object.keys(response.autonomyLegend).length > 0 && <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/8 pt-4">
+          <span className="text-xs text-muted-foreground">자율성 레벨</span>
+          {Object.entries(response.autonomyLegend).sort(([a], [b]) => a.localeCompare(b)).map(([level, label]) => <span key={level} className="inline-flex items-center gap-2">
+            <Badge variant="outline" className={autonomyStyle[level] ?? "border-white/10 text-slate-300"}>{level}</Badge>
+            <span className={`text-xs ${autonomyTextStyle[level] ?? "text-slate-300"}`}>{label}</span>
+          </span>)}
+        </div>}
+        {(response.mappingNote || response.analystNote) && <div className="mt-4 border-t border-white/8 pt-4 text-xs leading-5 text-slate-400">{[response.mappingNote, response.analystNote].filter(Boolean).join(" · ")}</div>}
+      </section>
+
+      {actions.length ? <div className="space-y-4">
+        {actions.map((action, index) => {
+          const techniqueUrl = action.techniqueId ? attackUrl(action.techniqueId) : null;
+          return (
+            <article key={action.id} className="signal-card overflow-hidden">
+              <div className="border-b border-white/8 p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="grid size-7 place-items-center rounded-md bg-white/[0.05] font-mono text-xs text-slate-300">{index + 1}</span>
+                  <Badge variant="outline" className={action.category === "immediate" ? "border-rose-400/25 bg-rose-400/7 text-rose-200" : "border-amber-400/25 bg-amber-400/7 text-amber-200"}>{action.categoryLabel}</Badge>
+                  {action.priority > 0 && <Badge variant="outline" className="border-white/10 text-slate-300">우선순위 {action.priority}</Badge>}
+                  {action.risk && <Badge variant="outline" className={riskStyle[action.risk] ?? severityStyle.UNKNOWN}>조치 위험 · {riskLabel[action.risk] ?? action.risk}</Badge>}
+                  {action.autonomy && <Badge variant="outline" className={autonomyStyle[action.autonomy] ?? "border-white/10 text-slate-300"}>{action.autonomy}</Badge>}
+                  {action.requiresApproval && <span className="text-xs text-violet-300">승인 필요</span>}
+                </div>
+                <h4 className="mt-3 text-base font-semibold text-slate-100">{action.title}</h4>
+                {action.reason && <p className="mt-2 text-sm leading-6 text-muted-foreground">{action.reason}</p>}
+              </div>
+
+              <div className="grid gap-px bg-white/8 sm:grid-cols-2">
+                <div className="bg-[#091119] p-4"><p className="text-xs text-muted-foreground">대상</p><p className={`mt-2 break-all text-sm leading-6 ${action.target ? "font-mono text-xs text-slate-200" : "text-slate-500"}`}>{action.target || "별도 대상이 지정되지 않았습니다."}</p></div>
+                <div className="bg-[#091119] p-4"><p className="text-xs text-muted-foreground">ATT&CK 연결</p>{action.techniqueId ? <p className="mt-2 text-sm text-slate-200">{techniqueUrl ? <a href={techniqueUrl} target="_blank" rel="noreferrer" className="font-mono text-cyan-300 underline decoration-cyan-400/30 underline-offset-4">{action.techniqueId}</a> : <span className="font-mono text-cyan-300">{action.techniqueId}</span>} {action.techniqueName}{action.tacticName ? ` · ${action.tacticName}` : ""}</p> : <p className="mt-2 text-sm leading-6 text-slate-500">일반 권고로 특정 ATT&CK 기법에 연결되지 않았습니다.</p>}</div>
+                <div className="bg-[#091119] p-4"><p className="text-xs text-muted-foreground">예상 영향</p><p className={`mt-2 text-sm leading-6 ${action.sideEffects ? "text-slate-300" : "text-slate-500"}`}>{action.sideEffects || "예상 영향이 별도로 기록되지 않았습니다."}</p></div>
+                <div className="bg-[#091119] p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><RotateCcw aria-hidden="true" className="size-3.5" />원복</p><p className={`mt-2 text-sm leading-6 ${action.rollback ? "text-slate-300" : "text-slate-500"}`}>{action.rollback || "원복 절차가 별도로 기록되지 않았습니다."}</p></div>
+                <div className="bg-[#091119] p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck aria-hidden="true" className="size-3.5" />검증</p><p className={`mt-2 text-sm leading-6 ${action.verification ? "text-slate-300" : "text-slate-500"}`}>{action.verification || "검증 방법이 별도로 기록되지 않았습니다."}</p></div>
+                <div className="bg-[#091119] p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Waypoints aria-hidden="true" className="size-3.5" />자율성 근거{action.autonomyDowngradedFrom ? ` · ${action.autonomyDowngradedFrom}에서 하향` : ""}</p><p className={`mt-2 text-sm leading-6 ${action.autonomyReason ? "text-slate-300" : "text-slate-500"}`}>{action.autonomyReason || "자율성 근거가 별도로 기록되지 않았습니다."}</p></div>
+              </div>
+
+              {(action.commandHint || action.evidenceIds.length > 0) && <div className="space-y-3 border-t border-white/8 p-4">
+                {action.commandHint && <div><p className="text-xs text-muted-foreground">명령 참고</p><pre className="mt-2 overflow-x-auto rounded-lg border border-white/8 bg-black/25 p-3 text-xs leading-5 text-cyan-100"><code>{action.commandHint}</code></pre></div>}
+                {action.evidenceIds.length > 0 && <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">근거</span>{action.evidenceIds.map((id) => <code key={id} className="rounded bg-white/5 px-2 py-1 text-xs text-slate-300">{id}</code>)}</div>}
+              </div>}
+            </article>
+          );
+        })}
+      </div> : <section className="signal-card p-6 text-sm text-muted-foreground">대응 결과는 연결되었지만 표시할 권고 조치가 없습니다.</section>}
+
+      {(response.remainingUnknowns.length > 0 || response.warnings.length > 0 || response.errors.length > 0) && <section className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-5">
+        <div className="flex items-center gap-2 text-amber-300"><AlertTriangle aria-hidden="true" className="size-4"/><h3 className="text-sm font-semibold">대응 전 확인 사항</h3></div>
+        <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-100/75">{[...response.remainingUnknowns, ...response.warnings, ...response.errors].map((item, index) => <li key={`${index}-${item}`}>• {item}</li>)}</ul>
+      </section>}
+    </div>
+  );
+}
+
+function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResponses */ }: {
+  incident: Incident | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  timezone: Timezone;
+  // onOpenResponses: (incidentId: string) => void;
+}) {
   if (!incident) return null;
   const allEvidence = [...incident.evidence, ...incident.contradictingEvidence].sort((a, b) => a.sequence - b.sequence);
   const timeline = incident.timeline.length ? incident.timeline : allEvidence.map((item) => ({ time: item.time, event: item.description, source: item.layer }));
@@ -1206,13 +1436,10 @@ function IncidentDetail({ incident, open, onOpenChange, timezone }: { incident: 
             </TabsContent>
 
             <TabsContent value="response" className="space-y-5">
-              <div className="grid gap-5 lg:grid-cols-2">
-                {[
-                  { icon: Sparkles, title: "대응 생성", step: "⑧", text: "권고 조치, 영향 범위, 롤백 정보가 이곳에 표시됩니다." },
-                  { icon: Waypoints, title: "자율성 레벨", step: "⑨", text: "L0/L1/L2와 실행·승인 상태가 이곳에 표시됩니다." },
-                ].map((item) => { const Icon = item.icon; return <article key={item.title} className="signal-card min-h-56 p-5"><div className="flex items-center justify-between"><div className="grid size-10 place-items-center rounded-lg border border-violet-400/20 bg-violet-400/8 text-violet-300"><Icon className="size-5"/></div><span className="font-mono text-xs text-slate-400">단계 {item.step}</span></div><h3 className="mt-5 font-semibold">{item.title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{item.text}</p><Badge variant="outline" className="mt-5 border-slate-600/40 text-slate-400">산출물 연결 예정</Badge></article>; })}
-              </div>
-              <div className="rounded-xl border border-slate-500/15 bg-slate-500/[0.035] p-5 text-sm leading-6 text-slate-300">대응 생성과 자율성 단계는 추후 산출물 스키마가 확정되면 이 탭에 연결할 예정입니다.</div>
+              {/* 대응 조치 탭 재활성화 시 이동 버튼도 복원합니다.
+              <button type="button" onClick={() => onOpenResponses(incident.incidentId)} className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/7 px-4 py-2.5 text-sm text-cyan-200"><ShieldCheck className="size-4"/>이 사건의 대응 모아 보기<ArrowRight className="size-4"/></button>
+              */}
+              <ResponsePanel incident={incident} />
             </TabsContent>
 
             <TabsContent value="diagnostics" className="space-y-5">
@@ -1298,8 +1525,8 @@ const pipelineSteps = [
   { step: "05", title: "조사 에이전트", subtitle: "도구 선택 루프", status: "active", icon: BrainCircuit },
   { step: "06", title: "판정·근거 검증", subtitle: "결론 · 신뢰도 · 출처", status: "active", icon: Fingerprint },
   { step: "07", title: "ATT&CK 매핑", subtitle: "RAG · ID 검증", status: "active", icon: Network },
-  { step: "08", title: "대응 생성", subtitle: "근거 기반 조치", status: "planned", icon: Sparkles },
-  { step: "09", title: "자율성 레벨", subtitle: "L0 · L1 · L2", status: "planned", icon: Waypoints },
+  { step: "08", title: "대응 생성", subtitle: "근거 기반 조치", status: "active", icon: Sparkles },
+  { step: "09", title: "자율성 레벨", subtitle: "권고별 L0 · L1 · L2", status: "active", icon: Waypoints },
   { step: "10", title: "대시보드", subtitle: "판정 · 근거 · 운영", status: "frame", icon: LayoutDashboard },
 ];
 
@@ -1350,6 +1577,7 @@ function Pipeline() {
 export default function Home() {
   const [dashboardData, setDashboardData] = useState<DashboardData>(resultData);
   const [view, setView] = useState<View>("overview");
+  // const [responseIncidentFilter, setResponseIncidentFilter] = useState<string | null>(null);
   const [selectedIncidentKey, setSelectedIncidentKey] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [timezone, setTimezone] = useState<Timezone>("UTC");
@@ -1358,6 +1586,7 @@ export default function Home() {
   const [newIncidentCount, setNewIncidentCount] = useState(0);
   const [announcement, setAnnouncement] = useState("");
   const [incidentFilterPreset, setIncidentFilterPreset] = useState<IncidentFilterPreset>({ revision: 0, verdict: "ALL", severity: "ALL" });
+  const [incidentViewPreset, setIncidentViewPreset] = useState<IncidentViewPreset>({ revision: 0, tab: "results", detectionState: "ALL" });
   const dashboardDataRef = useRef<DashboardData>(resultData);
   const requestRef = useRef<AbortController | null>(null);
   const requestRunningRef = useRef(false);
@@ -1434,6 +1663,8 @@ export default function Home() {
   };
 
   const changeView = (nextView: View) => {
+    // if (nextView === "responses") setResponseIncidentFilter(null);
+    if (nextView === "incidents") setIncidentViewPreset((current) => ({ revision: current.revision + 1, tab: "results", detectionState: "ALL" }));
     if (view === "incidents" && nextView !== "incidents") {
       setIncidentFilterPreset((current) => ({
         revision: current.revision + 1,
@@ -1447,9 +1678,17 @@ export default function Home() {
 
   const openFilteredIncidents = (filter: Pick<IncidentFilterPreset, "verdict" | "severity">) => {
     setIncidentFilterPreset((current) => ({ ...filter, revision: current.revision + 1 }));
+    setIncidentViewPreset((current) => ({ revision: current.revision + 1, tab: "results", detectionState: "ALL" }));
     setView("incidents");
     setNewIncidentCount(0);
     setAnnouncement("선택한 조건으로 사건 목록을 열었습니다.");
+  };
+
+  const openDetectionQueue = () => {
+    setIncidentViewPreset((current) => ({ revision: current.revision + 1, tab: "detections", detectionState: "queued" }));
+    setView("incidents");
+    setNewIncidentCount(0);
+    setAnnouncement("조사 대기 상태의 탐지·대기열을 열었습니다.");
   };
 
   const statusLabel = syncStatus === "live" ? "실시간 연결" : syncStatus === "retrying" ? "재연결 중" : "연결 중";
@@ -1520,14 +1759,26 @@ export default function Home() {
         </header>
 
         <div id="dashboard-content" className="mx-auto max-w-[1800px] p-4 pb-10 sm:p-6 2xl:p-8" tabIndex={-1}>
-          {view === "overview" && <Overview incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenFilteredIncidents={openFilteredIncidents} timezone={timezone} />}
-          {view === "incidents" && <IncidentsView key={`incidents-${incidentFilterPreset.revision}`} incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenResult={openIncidentByKey} filterPreset={incidentFilterPreset} timezone={timezone} />}
+          {view === "overview" && <Overview incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenFilteredIncidents={openFilteredIncidents} onOpenDetectionQueue={openDetectionQueue} timezone={timezone} />}
+          {view === "incidents" && <IncidentsView key={`incidents-${incidentFilterPreset.revision}-${incidentViewPreset.revision}`} incidents={incidents} pipeline={pipeline} onOpenIncident={openIncident} onOpenResult={openIncidentByKey} filterPreset={incidentFilterPreset} viewPreset={incidentViewPreset} timezone={timezone} />}
+          {/* 대응 조치 탭 임시 비활성화
+          {view === "responses" && <ResponseCenter key={`responses-${responseIncidentFilter ?? "all"}`} incidents={incidents} incidentId={responseIncidentFilter} timezone={timezone} onOpenIncident={(item) => {
+            const incident = incidents.find((candidate) => candidate.sourceFile === item.sourceFile && candidate.investigationId === item.investigationId);
+            if (incident) openIncident(incident);
+          }} />}
+          */}
           {view === "operations" && <Operations incidents={incidents} />}
           {view === "pipeline" && <Pipeline />}
         </div>
       </section>
 
-      <IncidentDetail incident={selectedIncident} open={detailOpen} onOpenChange={setDetailOpen} timezone={timezone} />
+      <IncidentDetail incident={selectedIncident} open={detailOpen} onOpenChange={setDetailOpen} timezone={timezone}
+        /* onOpenResponses={(incidentId) => {
+        setResponseIncidentFilter(incidentId);
+        setDetailOpen(false);
+        setView("responses");
+        }} */
+      />
     </main>
   );
 }

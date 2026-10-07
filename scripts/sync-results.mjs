@@ -34,12 +34,93 @@ const publicOutputPath = path.join(publicOutputDir, "incidents.generated.json");
 const cleanText = (value, fallback = "-") =>
   typeof value === "string" && value.trim() ? value.trim() : fallback;
 
+const optionalText = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
 const asArray = (value) => (Array.isArray(value) ? value : []);
 
 // 파이프라인 결과 폴더(results/)를 가리키면 하위 단계 폴더도 함께 읽습니다.
 // attack_mapping/ 의 *_final_report.json 은 조사 결과 + ATT&CK 매핑 최종본입니다.
 const STAGE_DIRS = ["attack_mapping", "investigation_agent"];
+const RESPONSE_DIR = "response";
 const MAPPING_ONLY_SUFFIX = "_attack_mapping.json";
+
+export const toResponse = (result, sourceFile) => {
+  if (!result || typeof result !== "object") return null;
+  const display = result.display && typeof result.display === "object" ? result.display : {};
+  const autonomyLegend = display.autonomy_legend && typeof display.autonomy_legend === "object"
+    ? display.autonomy_legend
+    : {};
+  const categoryLabels = display.category_labels && typeof display.category_labels === "object"
+    ? display.category_labels
+    : {};
+
+  return {
+    sourceFile,
+    status: cleanText(result.response_status, "unknown"),
+    statusLabel: cleanText(display.status_label, "대응 권고"),
+    autonomyLegend: Object.fromEntries(
+      Object.entries(autonomyLegend).map(([level, label]) => [level, cleanText(label, level)]),
+    ),
+    mappingNote: optionalText(display.mapping_note),
+    summary: optionalText(result.summary),
+    generatedAt: optionalText(result.generated_at),
+    model: optionalText(result.generator_model),
+    attackVersion: optionalText(result.attack_data?.version),
+    selectionMode: optionalText(result.selection_meta?.mode),
+    analystNote: optionalText(result.analyst_note),
+    remainingUnknowns: asArray(result.remaining_unknowns).map(String),
+    warnings: asArray(result.warnings).map(String),
+    errors: asArray(result.errors).map(String),
+    actions: asArray(result.actions).map((action, index) => {
+      const autonomy = optionalText(action.autonomy);
+      const category = cleanText(action.category, "other");
+      return {
+        id: cleanText(action.action_id, `action-${index + 1}`),
+        title: cleanText(action.title, "이름 없는 권고 조치"),
+        category,
+        categoryLabel: cleanText(categoryLabels[category], category),
+        priority: Number(action.priority ?? 0),
+        target: optionalText(action.target),
+        techniqueId: optionalText(action.technique_id),
+        techniqueIds: [...new Set([optionalText(action.technique_id), ...asArray(action.technique_ids).map(String)].filter(Boolean))],
+        templateId: optionalText(action.template_id),
+        mitigationSources: asArray(action.mitigation_sources).map((source) => ({
+          title: cleanText(source.title, "완화 문서"),
+          url: optionalText(source.url),
+          mitigationId: optionalText(source.mitigation_id),
+          version: optionalText(source.version),
+        })),
+        preconditions: asArray(action.preconditions).map(String),
+        execution: action.execution && typeof action.execution === "object" && optionalText(action.execution.status) ? {
+          status: optionalText(action.execution.status),
+          requestedAt: optionalText(action.execution.requested_at),
+          startedAt: optionalText(action.execution.started_at),
+          completedAt: optionalText(action.execution.completed_at),
+          verifiedAt: optionalText(action.execution.verified_at),
+          result: optionalText(action.execution.result),
+          verificationResult: optionalText(action.execution.verification_result),
+          actor: optionalText(action.execution.actor),
+        } : null,
+        techniqueName: optionalText(action.technique_name),
+        tacticName: optionalText(action.tactic_name),
+        risk: optionalText(action.risk),
+        reversible: Boolean(action.reversible),
+        requiresApproval: Boolean(action.requires_approval),
+        reason: optionalText(action.reason) || optionalText(action.default_reason),
+        commandHint: optionalText(action.command_hint),
+        rollback: optionalText(action.rollback),
+        sideEffects: optionalText(action.side_effects),
+        verification: optionalText(action.verification),
+        evidenceIds: asArray(action.evidence_ids).map(String),
+        autonomy,
+        autonomyLabel: autonomy ? cleanText(autonomyLegend[autonomy], autonomy) : "",
+        autonomyReason: optionalText(action.autonomy_reason),
+        autonomyDowngradedFrom: optionalText(action.autonomy_downgraded_from),
+      };
+    }),
+  };
+};
 
 // 매핑 결과만 담긴 파일(조사 판정 없음)은 사건이 아니므로 건너뜁니다.
 const isMappingOnly = (raw) =>
@@ -237,6 +318,25 @@ export async function listResultFiles() {
   return files;
 }
 
+// 대응 산출물은 사건 최종 보고서와 같은 파일 stem을 사용합니다.
+// 예: attack_mapping/INC-123_final_report.json ↔ response/INC-123_response.json
+export async function listResponseFiles() {
+  const directory = path.join(inputDir, RESPONSE_DIR);
+  try {
+    return (await readdir(directory))
+      .filter((name) => name.endsWith("_response.json"))
+      .sort()
+      .map((name) => `${RESPONSE_DIR}/${name}`);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+const responseStem = (file) => path.basename(file)
+  .replace(/_final_report\.json$/, "")
+  .replace(/_response\.json$/, "");
+
 // --- 1차 탐지 DB(soc.db) ----------------------------------------------------------
 // 파이프라인(detection_pipeline/store/incidents.py)이 5분마다 쓰는 DB를 읽기 전용으로 엽니다.
 // 상태 구분은 파이프라인 조사 대기열 조건(QUEUE_WHERE)과 같은 기준입니다.
@@ -427,8 +527,9 @@ async function readMatchingSnapshot(paths, source, incidents, pipeline) {
 
 export async function syncResults({ writeModuleSnapshot = true } = {}) {
   let files;
+  let responseFiles;
   try {
-    files = await listResultFiles();
+    [files, responseFiles] = await Promise.all([listResultFiles(), listResponseFiles()]);
   } catch {
     console.log(`[sync-results] 입력 디렉터리가 없어 기존 생성 데이터를 유지합니다: ${inputDir}`);
     try {
@@ -457,10 +558,36 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
     }
   }
 
+  const responsesByStem = new Map();
+  const responsesByIdentity = new Map();
+  for (const file of responseFiles) {
+    try {
+      const raw = JSON.parse(await readFile(path.join(inputDir, file), "utf8"));
+      const response = toResponse(raw, file);
+      if (!response) continue;
+      responsesByStem.set(responseStem(file), response);
+      const identity = `${cleanText(raw.incident_id, "")}::${cleanText(raw.investigation_id, "")}`;
+      const matches = responsesByIdentity.get(identity) ?? [];
+      matches.push(response);
+      responsesByIdentity.set(identity, matches);
+    } catch (error) {
+      invalidFiles.push(file);
+      console.warn(`[sync-results] 아직 읽을 수 없는 파일을 감지했습니다: ${file} (${error.message})`);
+    }
+  }
+
   // 생산 프로세스가 JSON을 쓰는 도중의 중간 상태를 대시보드에 배포하지 않습니다.
   // 감시 프로세스가 잠시 뒤 다시 시도하므로 기존의 정상 스냅샷은 그대로 유지됩니다.
   if (invalidFiles.length > 0) {
     throw new Error(`완전히 기록되지 않은 JSON ${invalidFiles.length}개가 있어 동기화를 보류했습니다.`);
+  }
+
+  for (const incident of incidents) {
+    const exact = responsesByStem.get(responseStem(incident.sourceFile));
+    const identity = `${incident.incidentId}::${incident.investigationId}`;
+    const identityMatches = responsesByIdentity.get(identity) ?? [];
+    // 동일 사건의 재출력(__2 등)은 파일 stem이 같은 대응 산출물을 최우선으로 연결합니다.
+    incident.response = exact ?? (identityMatches.length === 1 ? identityMatches[0] : null);
   }
 
   incidents = latestPerIncident(incidents);
