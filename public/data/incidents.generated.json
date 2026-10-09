@@ -1,7 +1,680 @@
 {
-  "generatedAt": "2026-10-07T07:08:39.311Z",
+  "generatedAt": "2026-10-09T14:19:36.460Z",
   "source": "results/*.json",
   "incidents": [
+    {
+      "sourceFile": "attack_mapping/INC-f638e9d4_final_report.json",
+      "incidentKey": "5fb10f4e8adb3541",
+      "incidentId": "INC-f638e9d4",
+      "investigationId": "INV-INC-f638e9d4-20261008-001",
+      "status": "COMPLETE",
+      "timestamp": "2026-10-08T19:16:15Z",
+      "triggerTime": "2026-10-07T11:24:50.727Z",
+      "window": [
+        "2026-10-07T11:24:50.721194Z",
+        "2026-10-07T11:24:55.144384Z"
+      ],
+      "title": "웹셸 설치 및 원격 명령 실행",
+      "summary": "114.10.134.160이 /?p=90 POST로 서버에서 셸 명령을 실행시켜 웹루트에 upload.php 업로더를 만들고, 이를 통해 wp-gans.php를 올려 호출했습니다. 웹셸 설치와 원격 명령 실행이 확인되었습니다.",
+      "reasoning": "web-audit 연결 확인: 같은 src_ip의 POST /?p=90 시각이 www-data 비대화형 셸 실행(upload.php 생성, ls) 시각과 일치함. 침해 신호: 웹 서버 계정의 셸 명령 실행, 웹루트 PHP 쓰기, 업로드 요청 뒤 해당 파일 실행 요청(upload.php, wp-gans.php 모두 200). 정상 관리 신호는 없음. 외부 반출 명령(curl/wget 등)은 audit 0건이라 데이터 유출은 확인되지 않음. src_ip의 network 계층은 이 턴에서 조회하지 않았고 unknowns에 남김. 탐지 룰 audit_webshell_recon·audit_webroot_php_write 원본은 audit에서 확인함.",
+      "verdict": "THREAT_CONFIRMED",
+      "severity": "CRITICAL",
+      "verdictConfidence": 0.95,
+      "investigationConfidence": 1,
+      "affectedSystems": [
+        "ip-10-0-7-236"
+      ],
+      "host": "ip-10-0-7-236",
+      "srcIp": "-",
+      "priority": 999,
+      "triggerDescription": "Web Process Executes Reconnaissance/Exploitation Command Without Interactive Session / Web Process Writes Executable Script Into Webroot",
+      "detectionSource": "investigation_pipeline",
+      "provenance": {
+        "status": "passed",
+        "rawRefCount": 356,
+        "evidenceWithoutRawRefs": [],
+        "issueCount": 0
+      },
+      "evidence": [
+        {
+          "id": "EVID-001",
+          "sequence": 1,
+          "time": "2026-10-07T11:24:50.727Z",
+          "layer": "process",
+          "eventType": "execve",
+          "description": "www-data(비대화형)가 sh -c printf '%s\\n' '<?php ... move_uploaded_file ... Upload PHP ...' > /var/www/html/upload.php 2>&1 를 실행해 웹루트에 PHP 업로더 생성 (pid 222833, ppid 172226; 동일 명령이 pid 222834, 222835로 총 3회 반복)",
+          "sourceLog": "audit",
+          "rawRefs": [
+            "audit.log:637145",
+            "audit.log:637146",
+            "audit.log:637147",
+            "audit.log:637148",
+            "audit.log:637149",
+            "audit.log:637150",
+            "audit.log:637156",
+            "audit.log:637157",
+            "audit.log:637158",
+            "audit.log:637159",
+            "audit.log:637160",
+            "audit.log:637161",
+            "audit.log:637167",
+            "audit.log:637168",
+            "audit.log:637169",
+            "audit.log:637170",
+            "audit.log:637171",
+            "audit.log:637172"
+          ],
+          "contribution": 0.25,
+          "stance": "supporting",
+          "mapping": {
+            "state": "mapped",
+            "techniques": [
+              "T1059.004"
+            ],
+            "reasons": []
+          }
+        },
+        {
+          "id": "EVID-002",
+          "sequence": 2,
+          "time": "2026-10-07T11:24:50.727Z",
+          "layer": "process",
+          "eventType": "openat",
+          "description": "www-data의 sh가 /var/www/html/upload.php를 openat로 생성(CREATE, key=webroot), 이후 pid 222834/222835도 같은 파일을 열어 씀",
+          "sourceLog": "audit",
+          "rawRefs": [
+            "audit.log:637151",
+            "audit.log:637152",
+            "audit.log:637153",
+            "audit.log:637154",
+            "audit.log:637155",
+            "audit.log:637162",
+            "audit.log:637163",
+            "audit.log:637164",
+            "audit.log:637165",
+            "audit.log:637166",
+            "audit.log:637173",
+            "audit.log:637174",
+            "audit.log:637175",
+            "audit.log:637176",
+            "audit.log:637177"
+          ],
+          "contribution": 0.15,
+          "stance": "supporting",
+          "mapping": {
+            "state": "unmatched",
+            "techniques": [],
+            "reasons": []
+          }
+        },
+        {
+          "id": "EVID-003",
+          "sequence": 3,
+          "time": "2026-10-07T11:24:54.325Z",
+          "layer": "process",
+          "eventType": "execve",
+          "description": "www-data가 sh -c ls 2>&1 및 하위 ls를 웹루트에서 실행 (pid 222839/222840, 222841/222842, 222843/222844). 앞선 11:23의 sh -c pwd 2>&1, sh -c la 2>&1, sh -c ls 2>&1(audit.log:637073, 637091, 637109)와 같은 반복 명령 실행 패턴",
+          "sourceLog": "audit",
+          "rawRefs": [
+            "audit.log:637178",
+            "audit.log:637179",
+            "audit.log:637180",
+            "audit.log:637181",
+            "audit.log:637182",
+            "audit.log:637183",
+            "audit.log:637184",
+            "audit.log:637185",
+            "audit.log:637186",
+            "audit.log:637187",
+            "audit.log:637188",
+            "audit.log:637189",
+            "audit.log:637190",
+            "audit.log:637191",
+            "audit.log:637192",
+            "audit.log:637193",
+            "audit.log:637194",
+            "audit.log:637195",
+            "audit.log:637196",
+            "audit.log:637197",
+            "audit.log:637198",
+            "audit.log:637199",
+            "audit.log:637200",
+            "audit.log:637201",
+            "audit.log:637202",
+            "audit.log:637203",
+            "audit.log:637204",
+            "audit.log:637205",
+            "audit.log:637206",
+            "audit.log:637207",
+            "audit.log:637208",
+            "audit.log:637209",
+            "audit.log:637210",
+            "audit.log:637211",
+            "audit.log:637212",
+            "audit.log:637213"
+          ],
+          "contribution": 0.15,
+          "stance": "supporting",
+          "mapping": {
+            "state": "mapped",
+            "techniques": [
+              "T1059.004"
+            ],
+            "reasons": []
+          }
+        },
+        {
+          "id": "EVID-004",
+          "sequence": 4,
+          "time": "2026-10-07T11:25:19.746Z",
+          "layer": "process",
+          "eventType": "rename/chmod",
+          "description": "php-fpm8.1(www-data)가 /tmp/phpLphAA3를 /var/www/html/wp-gans.php로 rename한 뒤 chmod함. PHP 업로드 파일이 웹루트에 저장된 정황",
+          "sourceLog": "audit",
+          "rawRefs": [
+            "audit.log:637225",
+            "audit.log:637226",
+            "audit.log:637227",
+            "audit.log:637228",
+            "audit.log:637229",
+            "audit.log:637230",
+            "audit.log:637231",
+            "audit.log:637232",
+            "audit.log:637233",
+            "audit.log:637234",
+            "audit.log:637235"
+          ],
+          "contribution": 0.15,
+          "stance": "supporting",
+          "mapping": {
+            "state": "unmatched",
+            "techniques": [],
+            "reasons": []
+          }
+        },
+        {
+          "id": "EVID-005",
+          "sequence": 5,
+          "time": "2026-10-07T11:24:50.721194Z",
+          "layer": "web",
+          "eventType": "web_post_to_webshell_exec",
+          "description": "src_ip 114.10.134.160이 POST /?p=90(200)을 11:23:20, 11:23:24, 11:23:27, 11:24:50, 11:24:54에 요청함. 각 시각에 audit에서 www-data의 sh -c 명령이 실행됨(예: 11:24:50 upload.php 생성, 11:24:54 sh -c ls 2>&1). web 요청과 서버 내 셸 실행이 시간상 연결됨",
+          "sourceLog": "access.log.1",
+          "rawRefs": [
+            "access.log.1:680",
+            "access.log.1:682",
+            "access.log.1:684",
+            "access.log.1:686",
+            "access.log.1:688"
+          ],
+          "contribution": 0.2,
+          "stance": "supporting",
+          "mapping": {
+            "state": "mapped",
+            "techniques": [
+              "T1059.004",
+              "T1505.003"
+            ],
+            "reasons": []
+          }
+        },
+        {
+          "id": "EVID-006",
+          "sequence": 6,
+          "time": "2026-10-07T11:25:03.611530Z",
+          "layer": "web",
+          "eventType": "web_upload_and_access_shell",
+          "description": "같은 IP가 GET /upload.php(200), POST /upload.php(200, referer upload.php), GET /wp-gans.php(200), GET /wp-gans.php?path=/var/www(200)를 요청함. 생성된 업로더로 wp-gans.php를 올리고 호출해 디렉터리 탐색 기능을 사용한 정황",
+          "sourceLog": "access.log.1",
+          "rawRefs": [
+            "access.log.1:690",
+            "access.log.1:691",
+            "access.log.1:692",
+            "access.log.1:693",
+            "access.log.1:694"
+          ],
+          "contribution": 0.2,
+          "stance": "supporting",
+          "mapping": {
+            "state": "mapped",
+            "techniques": [
+              "T1505.003"
+            ],
+            "reasons": []
+          }
+        }
+      ],
+      "contradictingEvidence": [],
+      "timeline": [
+        {
+          "time": "2026-10-07T11:23:20Z",
+          "event": "POST /?p=90 직후 www-data가 sh -c pwd/la/ls 실행 시작",
+          "source": "114.10.134.160"
+        },
+        {
+          "time": "2026-10-07T11:24:50Z",
+          "event": "POST /?p=90 후 www-data가 /var/www/html/upload.php 업로더 생성 (3회)",
+          "source": "114.10.134.160 / www-data"
+        },
+        {
+          "time": "2026-10-07T11:24:54Z",
+          "event": "sh -c ls 2>&1 실행",
+          "source": "114.10.134.160 / www-data"
+        },
+        {
+          "time": "2026-10-07T11:25:19Z",
+          "event": "POST /upload.php 후 /tmp/phpLphAA3가 /var/www/html/wp-gans.php로 저장됨",
+          "source": "114.10.134.160 / php-fpm8.1"
+        },
+        {
+          "time": "2026-10-07T11:25:31Z",
+          "event": "GET /wp-gans.php?path=/var/www 요청",
+          "source": "114.10.134.160"
+        }
+      ],
+      "unknowns": [
+        "wp-gans.php의 실제 내용과 이후 수행한 기능",
+        "114.10.134.160의 network 계층 기록 (아직 조회하지 못함)",
+        "/?p=90의 초기 침입 취약점 종류"
+      ],
+      "notes": [
+        "신뢰도 임계값 도달 — 다음 사이클에서 종료 여부 재확인 필요",
+        "wp-gans.php와 upload.php 제거, 웹루트 파일 무결성 점검 및 114.10.134.160 차단 검토",
+        "/?p=90의 초기 침투 경로 확인 필요",
+        "114.10.134.160의 network 계층 기록 추가 조회 필요"
+      ],
+      "tools": [
+        {
+          "sequence": 1,
+          "name": "fetch_audit_log",
+          "resultCount": 28,
+          "summary": "ip-10-0-7-236의 2026-10-07T10:54:50Z~2026-10-07T12:24:55Z 구간에서 조건에 맞는 audit 이벤트 총 28건 중 0~27번째 28건 반환. (더 없음, uid/euid/session_type/exec_args까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 이벤트 28건(실제 기록 시각 2026-10-07T11:23:20.656Z~2026-10-07T11:25:31.023Z), 실행 계정별: www-data 28건, 명령별: sh 18건, ls 6건, php-fpm8.1 4건. [후속 침해 확인] 웹 서버 계정(www-data/apache/nginx/http) 실행 28건 중 셸·의심 명령 18건, 전체 의심 명령(curl/wget//dev/tcp/crontab 등, EC2 Instance Connect 제외) 0건 — 예: www-data: sh -c pwd 2>&1 (audit.log:637073) / www-data: sh -c pwd 2>&1 (audit.log:637079) / www-data: sh -c pwd 2>&1 (audit.log:637085). (페이지와 무관한 전체 기준. 0건이 아니면 user나 pid로 다시 조회해 원본을 확인하십시오)",
+          "queriedLayers": [],
+          "success": true
+        },
+        {
+          "sequence": 2,
+          "name": "fetch_web_log",
+          "resultCount": 196,
+          "summary": "ip-10-0-7-236의 2026-10-07T10:24:50Z~2026-10-07T12:24:55Z 구간에서 조건에 맞는 web 요청 총 196건 중 0~195번째 196건 반환. (더 없음, method/path/status/duration_us까지 구조화, 1차 탐지팀 공통 정규화 함수 사용) [조회 구간 전체 집계] 요청 196건(실제 기록 시각 2026-10-07T10:25:20.708463Z~2026-10-07T12:14:42.308981Z), 출발지 IP 19개, 메서드별: POST 155건, GET 33건, OPTIONS 4건, HEAD 2건, IMVM 1건, 상태코드 계열별: 2xx 190건, 4xx 6건, 서로 다른 경로 13개, 상위 경로: /xmlrpc.php 146건, / 25건, /?p=90 6건, /?p=1&embed=true 6건, /favicon.ico 3건, User-Agent 상위: Jetpack by WordPress.com 41건, WordPress.com; https://wordpress.com 33건, Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome 21건, Mozilla/5.0 (compatible) 15건, Jetpack by WordPress.com (Jetpack 12.5; WordPress 6.2) 6건 [원칙 9 기준] 출발지 IP가 여러 개라 계산하지 않음 — src_ip로 거른 조회에서 확인하십시오.",
+          "queriedLayers": [],
+          "success": true
+        }
+      ],
+      "statistics": {
+        "toolCalls": 2,
+        "evidenceCount": 6,
+        "contradictingEvidenceCount": 0,
+        "terminationReason": "no_more_evidence"
+      },
+      "attackMapping": {
+        "status": "mapped",
+        "method": "rag_llm",
+        "attackVersion": "19.2",
+        "retrievalVersion": "hybrid-bm25-e5-rrf-v1",
+        "techniques": [
+          {
+            "id": "T1059.004",
+            "name": "Unix Shell",
+            "tactic": "Execution",
+            "parent": "T1059 Command and Scripting Interpreter",
+            "evidenceIds": [
+              "EVID-001",
+              "EVID-003",
+              "EVID-005"
+            ],
+            "reasons": [
+              {
+                "evidenceIds": [
+                  "EVID-001"
+                ],
+                "reason": "www-data 계정이 execve로 'sh -c' 명령을 실행해 printf 출력을 /var/www/html/upload.php로 리디렉션하여 PHP 업로더를 생성했다(총 3회 반복). 이는 Unix Shell(sh)을 이용한 명령 실행에 해당한다."
+              },
+              {
+                "evidenceIds": [
+                  "EVID-003"
+                ],
+                "reason": "www-data 계정이 웹루트에서 'sh -c ls 2>&1' 등 sh 셸을 통해 명령을 반복 실행했고, 앞선 'sh -c pwd', 'sh -c la' 실행과 같은 패턴이 확인된다. 이는 Unix 셸을 이용한 명령 실행이라는 Unix Shell의 정의와 직접 일치한다."
+              },
+              {
+                "evidenceIds": [
+                  "EVID-005"
+                ],
+                "reason": "POST 요청 직후 audit에서 www-data 계정의 sh -c 명령(ls 2>&1, upload.php 생성 등)이 실행되어 Unix shell을 통한 명령 실행이 직접 관찰된다."
+              }
+            ]
+          },
+          {
+            "id": "T1505.003",
+            "name": "Web Shell",
+            "tactic": "Persistence",
+            "parent": "T1505 Server Software Component",
+            "evidenceIds": [
+              "EVID-005",
+              "EVID-006"
+            ],
+            "reasons": [
+              {
+                "evidenceIds": [
+                  "EVID-005"
+                ],
+                "reason": "웹 서버의 POST /?p=90 요청이 서버 내 셸 명령 실행으로 시간상 연결되고 upload.php가 생성되어, 웹 서버에 설치된 web shell을 통해 명령을 실행하는 행위와 일치한다."
+              },
+              {
+                "evidenceIds": [
+                  "EVID-006"
+                ],
+                "reason": "같은 IP가 upload.php를 통해 wp-gans.php를 업로드(POST 200)한 뒤 해당 파일을 GET으로 호출하고, path=/var/www 파라미터로 디렉터리 탐색 기능을 사용했다. 이는 웹 서버에 설치된 웹 스크립트를 통해 시스템 기능에 접근하는 Web Shell 정의와 일치한다."
+              }
+            ]
+          }
+        ],
+        "killChain": [
+          {
+            "step": 1,
+            "tactic": "Execution",
+            "techniqueId": "T1059.004",
+            "techniqueName": "Unix Shell",
+            "time": "2026-10-07T11:24:50.721194Z",
+            "evidenceIds": [
+              "EVID-001",
+              "EVID-003",
+              "EVID-005"
+            ]
+          },
+          {
+            "step": 2,
+            "tactic": "Persistence",
+            "techniqueId": "T1505.003",
+            "techniqueName": "Web Shell",
+            "time": "2026-10-07T11:24:50.721194Z",
+            "evidenceIds": [
+              "EVID-005",
+              "EVID-006"
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "evidenceId": "EVID-001",
+            "candidates": [
+              "T1134.004",
+              "T1036.009",
+              "T1036.011",
+              "T1574.006",
+              "T1059.004",
+              "T1574.007",
+              "T1036.008",
+              "T1546.004",
+              "T1003.007",
+              "T1222"
+            ],
+            "selected": [
+              "T1059.004"
+            ]
+          },
+          {
+            "evidenceId": "EVID-002",
+            "candidates": [
+              "T1003.007",
+              "T1036.009",
+              "T1036.011",
+              "T1134.004",
+              "T1003.001",
+              "T1543.002",
+              "T1546.001",
+              "T1187",
+              "T1098.004",
+              "T1055.009"
+            ],
+            "selected": []
+          },
+          {
+            "evidenceId": "EVID-003",
+            "candidates": [
+              "T1574.006",
+              "T1059.004",
+              "T1036.009",
+              "T1059",
+              "T1036.011",
+              "T1574.007",
+              "T1003.007",
+              "T1546.004",
+              "T1218.011",
+              "T1564.014"
+            ],
+            "selected": [
+              "T1059.004"
+            ]
+          },
+          {
+            "evidenceId": "EVID-004",
+            "candidates": [
+              "T1036.008",
+              "T1036.011",
+              "T1055.013",
+              "T1546.001",
+              "T1134.004",
+              "T1543.002",
+              "T1564.010",
+              "T1556",
+              "T1055.012",
+              "T1574.013"
+            ],
+            "selected": []
+          },
+          {
+            "evidenceId": "EVID-005",
+            "candidates": [
+              "T1546.004",
+              "T1059.004",
+              "T1505.003",
+              "T1690",
+              "T1546.001",
+              "T1189",
+              "T1059.008",
+              "T1053.006",
+              "T1222",
+              "T1059"
+            ],
+            "selected": [
+              "T1059.004",
+              "T1505.003"
+            ]
+          },
+          {
+            "evidenceId": "EVID-006",
+            "candidates": [
+              "T1102.001",
+              "T1574.007",
+              "T1567.004",
+              "T1498.002",
+              "T1505.003",
+              "T1027.012",
+              "T1677",
+              "T1189",
+              "T1056.004",
+              "T1505.004"
+            ],
+            "selected": [
+              "T1505.003"
+            ]
+          }
+        ],
+        "exclusions": [],
+        "unmatched": [
+          "EVID-002",
+          "EVID-004"
+        ],
+        "rejected": [],
+        "errors": []
+      },
+      "response": {
+        "sourceFile": "response/INC-f638e9d4_response.json",
+        "status": "recommended",
+        "statusLabel": "확정 · 권고",
+        "autonomyLegend": {
+          "L0": "담당자 판단",
+          "L1": "승인 후 수동 실행",
+          "L2": "자동화 후보(현재 자동 실행 안 함)"
+        },
+        "mappingNote": "",
+        "summary": "",
+        "generatedAt": "",
+        "model": "",
+        "attackVersion": "19.2",
+        "selectionMode": "llm_selected",
+        "analystNote": "wp-gans.php의 실제 내용과 이후 수행한 기능, 초기 침입 취약점(/?p=90)은 아직 확인되지 않았습니다. 격리한 파일은 삭제하지 말고 분석용으로 보존하십시오.",
+        "remainingUnknowns": [
+          "wp-gans.php의 실제 내용과 이후 수행한 기능",
+          "114.10.134.160의 network 계층 기록 (아직 조회하지 못함)",
+          "/?p=90의 초기 침입 취약점 종류"
+        ],
+        "warnings": [],
+        "errors": [],
+        "actions": [
+          {
+            "id": "act_01",
+            "title": "실행 명령 이력 보존",
+            "category": "immediate",
+            "categoryLabel": "즉시 조치",
+            "priority": 1,
+            "target": "",
+            "techniqueId": "T1059.004",
+            "techniqueIds": [
+              "T1059.004"
+            ],
+            "templateId": "T1059_004_HISTORY_PRESERVE",
+            "mitigationSources": [],
+            "preconditions": [],
+            "execution": null,
+            "techniqueName": "Unix Shell",
+            "tacticName": "Execution",
+            "risk": "MED",
+            "reversible": true,
+            "requiresApproval": true,
+            "reason": "웹 요청과 연결된 www-data의 셸 명령 실행 기록이 침해 범위 파악의 핵심 증거입니다 (EVID-001).",
+            "commandHint": "웹 서버 호스트의 audit.log와 웹 접근 로그에서 www-data의 sh -c 실행 기록(pid 222833~222844 및 11:23 구간의 pwd, la, ls)을 읽기 전용으로 별도 보관 위치에 복사해 보존하고, 담당자가 원본 변경 여부를 확인하십시오.",
+            "rollback": "복사본만 만들기 때문에 되돌릴 사항이 없으며, 불필요해진 사본은 보존 정책에 따라 처리합니다.",
+            "sideEffects": "로그 복사로 디스크를 일부 사용하는 것 외에는 서비스 영향이 없습니다. 영향 범위는 호스트 1대입니다.",
+            "verification": "보관한 사본에 EVID-001, EVID-003 시각의 sh -c 실행 기록이 포함되어 있고 원본과 내용이 같으면 성공입니다.",
+            "evidenceIds": [
+              "EVID-001",
+              "EVID-003",
+              "EVID-005"
+            ],
+            "autonomy": "L1",
+            "autonomyLabel": "승인 후 수동 실행",
+            "autonomyReason": "L1(승인 후 수동 실행)입니다. 대상이 특정 파일이 아니라 점검 항목이라 담당자가 보존 범위를 정하고 승인한 뒤 실행해야 합니다.",
+            "autonomyDowngradedFrom": ""
+          },
+          {
+            "id": "act_02",
+            "title": "웹셸 파일 격리",
+            "category": "immediate",
+            "categoryLabel": "즉시 조치",
+            "priority": 1,
+            "target": "/var/www/html/upload.php",
+            "techniqueId": "T1505.003",
+            "techniqueIds": [
+              "T1505.003"
+            ],
+            "templateId": "T1505_003_QUARANTINE",
+            "mitigationSources": [],
+            "preconditions": [],
+            "execution": null,
+            "techniqueName": "Web Shell",
+            "tacticName": "Persistence",
+            "risk": "LOW",
+            "reversible": true,
+            "requiresApproval": true,
+            "reason": "업로더로 생성된 upload.php가 웹루트에 남아 공격자가 계속 호출할 수 있습니다 (EVID-006).",
+            "commandHint": "sudo mv /var/www/html/upload.php /var/quarantine/",
+            "rollback": "sudo mv /var/quarantine/upload.php /var/www/html/upload.php",
+            "sideEffects": "upload.php 접근이 중단되며 정상 기능이 이 파일에 의존하지 않는다면 영향이 없습니다. 영향 범위는 파일 1개입니다.",
+            "verification": "/var/www/html/upload.php 가 사라지고 /var/quarantine/ 아래에 있는지, 해당 URL 요청이 404인지 확인",
+            "evidenceIds": [
+              "EVID-005",
+              "EVID-006"
+            ],
+            "autonomy": "L2",
+            "autonomyLabel": "자동화 후보(현재 자동 실행 안 함)",
+            "autonomyReason": "L2(자동화 후보)입니다. 대상이 파일 1개이고 격리 이동이라 원복할 수 있으며 위험이 낮습니다.",
+            "autonomyDowngradedFrom": ""
+          },
+          {
+            "id": "act_03",
+            "title": "해당 프로세스(및 자식 프로세스) 종료",
+            "category": "immediate",
+            "categoryLabel": "즉시 조치",
+            "priority": 2,
+            "target": "222833",
+            "techniqueId": "T1059.004",
+            "techniqueIds": [
+              "T1059.004"
+            ],
+            "templateId": "T1059_004_PROCESS_KILL",
+            "mitigationSources": [],
+            "preconditions": [],
+            "execution": null,
+            "techniqueName": "Unix Shell",
+            "tacticName": "Execution",
+            "risk": "MED",
+            "reversible": false,
+            "requiresApproval": true,
+            "reason": "www-data 셸 프로세스가 웹 요청에 따라 명령을 실행했으므로 활성 세션 차단이 필요합니다 (EVID-001).",
+            "commandHint": "sudo pkill -TERM -P 222833; sudo kill -TERM 222833",
+            "rollback": "되돌릴 수 없음. 종료된 프로세스는 복구되지 않으므로 필요하면 웹 서비스(php-fpm)를 재시작하여 정상 동작을 복구합니다.",
+            "sideEffects": "해당 프로세스와 자식 프로세스의 작업이 중단됩니다. 정상 요청이 같은 프로세스에서 처리 중이면 일부 끊길 수 있으며 영향 범위는 해당 프로세스 트리입니다.",
+            "verification": "ps -p 222833이 결과를 반환하지 않고 www-data의 sh -c 프로세스가 새로 생기지 않으면 성공입니다.",
+            "evidenceIds": [
+              "EVID-001",
+              "EVID-003",
+              "EVID-005"
+            ],
+            "autonomy": "L1",
+            "autonomyLabel": "승인 후 수동 실행",
+            "autonomyReason": "L1(승인 후 수동 실행)입니다. 프로세스 종료는 되돌릴 수 없고 위험이 중간이므로 담당자 승인 후 실행합니다.",
+            "autonomyDowngradedFrom": ""
+          },
+          {
+            "id": "act_04",
+            "title": "웹루트 내 최근 생성 파일 전수 점검",
+            "category": "verify_needed",
+            "categoryLabel": "확인 필요",
+            "priority": 2,
+            "target": "",
+            "techniqueId": "T1505.003",
+            "techniqueIds": [
+              "T1505.003"
+            ],
+            "templateId": "T1505_003_WEBROOT_SWEEP",
+            "mitigationSources": [],
+            "preconditions": [],
+            "execution": null,
+            "techniqueName": "Web Shell",
+            "tacticName": "Persistence",
+            "risk": "LOW",
+            "reversible": true,
+            "requiresApproval": true,
+            "reason": "wp-gans.php 같은 추가 업로드 파일이 더 있을 수 있어 웹루트 전체 점검이 필요합니다 (EVID-006).",
+            "commandHint": "웹루트(/var/www/html) 아래에서 11:23 이후 생성·수정된 파일을 읽기 전용으로 조회하고, wp-gans.php를 포함해 낯선 PHP 파일이 있는지 확인하십시오.",
+            "rollback": "읽기 전용 점검이라 되돌릴 사항이 없습니다.",
+            "sideEffects": "없음 — 읽기 전용 점검이라 파일과 서비스를 변경하지 않습니다.",
+            "verification": "점검 결과에 upload.php, wp-gans.php 외 의심 파일이 있는지 목록으로 정리되면 성공입니다.",
+            "evidenceIds": [
+              "EVID-005",
+              "EVID-006"
+            ],
+            "autonomy": "L2",
+            "autonomyLabel": "자동화 후보(현재 자동 실행 안 함)",
+            "autonomyReason": "L2(자동화 후보)입니다. 읽기 전용이고 되돌릴 수 있으며 위험이 낮아 자동화해도 안전합니다.",
+            "autonomyDowngradedFrom": ""
+          }
+        ]
+      },
+      "triage": null
+    },
     {
       "sourceFile": "attack_mapping/INC-f49f69a7_final_report.json",
       "incidentKey": "683834bca3da2846",
@@ -7831,11 +8504,11 @@
       "queued": 25,
       "investigating": 0,
       "resultUnmarked": 4,
-      "investigated": 9,
-      "threat": 9,
+      "investigated": 10,
+      "threat": 10,
       "falsePositive": 0,
       "inconclusive": 0,
-      "mapped": 6
+      "mapped": 7
     },
     "detections": [
       {
@@ -14447,5 +15120,60 @@
         "resultKey": ""
       }
     ]
+  },
+  "operations": {
+    "stageDurations": [
+      {
+        "stage": "normalize",
+        "avgMs": 33520,
+        "count": 1
+      },
+      {
+        "stage": "detect",
+        "avgMs": 1040,
+        "count": 1
+      },
+      {
+        "stage": "correlate",
+        "avgMs": 440,
+        "count": 1
+      },
+      {
+        "stage": "triage",
+        "avgMs": 20,
+        "count": 1
+      },
+      {
+        "stage": "db",
+        "avgMs": 0,
+        "count": 1
+      },
+      {
+        "stage": "investigation",
+        "avgMs": 120240,
+        "count": 1
+      },
+      {
+        "stage": "respond",
+        "avgMs": 17752,
+        "count": 1
+      }
+    ],
+    "tokenTimeline": [
+      {
+        "startedAt": "2026-10-08T19:14:47.905238Z",
+        "stage": "investigation",
+        "model": "claude-sonnet-5-5",
+        "inputTokens": 101094,
+        "outputTokens": 5642,
+        "cacheReadTokens": 35980
+      }
+    ],
+    "llmTotals": {
+      "inputTokens": 101094,
+      "outputTokens": 5642,
+      "cacheReadTokens": 35980,
+      "calls": 1
+    }
   }
 }

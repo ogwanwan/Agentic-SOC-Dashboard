@@ -74,6 +74,12 @@ const ChartDonut = createLucideIcon("chart-donut", [
 ]);
 
 type Incident = (typeof resultData.incidents)[number];
+
+type OperationsData = {
+  stageDurations: { stage: string; avgMs: number; count: number }[];
+  tokenTimeline: { startedAt: string; stage: string; model: string | null; inputTokens: number; outputTokens: number; cacheReadTokens: number }[];
+  llmTotals: { inputTokens: number; outputTokens: number; cacheReadTokens: number; calls: number };
+} | null;
 type DashboardData = typeof resultData;
 type View = "overview" | "incidents" | "operations" | "pipeline";
 // 대응 조치 탭 재활성화 시 View에 "responses"를 추가합니다.
@@ -1337,7 +1343,15 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
   if (!incident) return null;
   const allEvidence = [...incident.evidence, ...incident.contradictingEvidence].sort((a, b) => a.sequence - b.sequence);
   const timeline = incident.timeline.length ? incident.timeline : allEvidence.map((item) => ({ time: item.time, event: item.description, source: item.layer }));
-  const layers = [...new Set(allEvidence.map((item) => item.layer))];
+  const reasoningBlocks = incident.reasoning
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .flatMap((block) => block.trim().split(/\n+/))
+    .flatMap((line) => line.trim().split(/(?<=[.!?])\s+(?=[가-힣A-Z\[])/))
+    .map((line) => line.trim().replace(/^#{1,6}\s*/, "").replace(/^[-*]\s+/, ""))
+    .filter(Boolean);
+  const alternativeReasoning = reasoningBlocks.filter((block) => /(?:대안|반대 해석|반면|그러나|하지만|정상 활동|모의훈련|훈련일 가능성|승인된|반박 증거|반박 신호|가설\s*\(?H\d)/i.test(block));
+  const primaryReasoning = reasoningBlocks.filter((block) => !alternativeReasoning.includes(block));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1358,7 +1372,6 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
             <TabsTrigger value="evidence" className="flex-none px-4">타임라인·증거</TabsTrigger>
             <TabsTrigger value="attack" className="flex-none px-4">ATT&CK</TabsTrigger>
             <TabsTrigger value="response" className="flex-none px-4">대응</TabsTrigger>
-            <TabsTrigger value="diagnostics" className="flex-none px-4">조사 범위</TabsTrigger>
           </TabsList>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
@@ -1369,7 +1382,18 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
                   <p className="mt-4 text-base leading-7 text-slate-200">{incident.summary}</p>
                   <div className="mt-5 border-t border-white/8 pt-5">
                     <p className="text-sm font-semibold">판정 근거</p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">{incident.reasoning}</p>
+                    <div className="mt-4 rounded-lg border border-cyan-400/12 bg-cyan-400/[0.025] p-4">
+                      <p className="text-xs font-semibold text-cyan-200">판단 논리</p>
+                      <div className="mt-3 space-y-3">{primaryReasoning.map((block, index) => <p key={`${index}-${block}`} className="text-sm leading-7 text-muted-foreground">{block}</p>)}</div>
+                    </div>
+                    {alternativeReasoning.length > 0 && <div className="mt-3 rounded-lg border border-violet-400/12 bg-violet-400/[0.025] p-4">
+                      <p className="text-xs font-semibold text-violet-200">대안·반대 해석 검토</p>
+                      <div className="mt-3 space-y-3">{alternativeReasoning.map((block, index) => <p key={`${index}-${block}`} className="text-sm leading-7 text-muted-foreground">{block}</p>)}</div>
+                    </div>}
+                    {incident.unknowns.length > 0 && <div className="mt-5 rounded-lg border border-amber-400/15 bg-amber-400/[0.035] p-4">
+                      <p className="text-xs font-semibold text-amber-300">판정의 확인 한계</p>
+                      <ul className="mt-2 space-y-2 text-sm leading-6 text-amber-100/75">{incident.unknowns.map((item) => <li key={item}>• {item}</li>)}</ul>
+                    </div>}
                   </div>
                 </article>
                 <article className="signal-card p-5">
@@ -1405,7 +1429,6 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
                 <p className="mt-4 text-xs leading-5 text-muted-foreground">근거 검증은 인용한 원본을 역추적할 수 있다는 뜻이며, 공격 판정의 정확성을 보증하지 않습니다.</p>
               </section>
 
-              {incident.unknowns.length > 0 && <section className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-5"><div className="flex items-center gap-2 text-amber-300"><AlertTriangle className="size-4"/><h3 className="text-sm font-semibold">미해결 항목</h3></div><ul className="mt-3 space-y-2 text-sm text-amber-100/75">{incident.unknowns.map((item) => <li key={item}>• {item}</li>)}</ul></section>}
             </TabsContent>
 
             <TabsContent value="evidence" className="space-y-5">
@@ -1442,16 +1465,6 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
               <ResponsePanel incident={incident} />
             </TabsContent>
 
-            <TabsContent value="diagnostics" className="space-y-5">
-              <section className="signal-card p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">조사 범위</h3><p className="mt-1 text-xs text-muted-foreground">도구 원문 대신 확인한 계층과 결과 건수를 요약합니다.</p></div><span className="font-mono text-xs text-muted-foreground">호출 {incident.statistics.toolCalls}회</span></div>
-                <div className="mt-5 flex flex-wrap gap-2">{layers.map((layer) => <Badge key={layer} variant="outline" className="border-cyan-400/20 bg-cyan-400/5 text-cyan-200">{layer}</Badge>)}</div>
-              </section>
-              <section className="signal-card overflow-hidden">
-                <div className="border-b border-white/8 p-5"><h3 className="text-sm font-semibold">도구 실행 요약</h3></div>
-                <div className="divide-y divide-white/7">{incident.tools.map((tool) => <details key={`${tool.sequence}-${tool.name}`} className="group p-5"><summary className="flex cursor-pointer list-none items-center gap-3"><span className={`size-2 rounded-full ${tool.success ? "bg-emerald-400" : "bg-rose-400"}`}/><span className="font-mono text-sm text-cyan-200">{tool.name}</span><span className="text-xs text-muted-foreground">결과 {tool.resultCount}건</span><ChevronRight className="ml-auto size-4 text-slate-500 transition group-open:rotate-90"/></summary><p className="mt-3 pl-5 text-sm leading-6 text-muted-foreground">{tool.summary}</p></details>)}</div>
-              </section>
-            </TabsContent>
           </div>
         </Tabs>
       </DialogContent>
@@ -1459,11 +1472,30 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
   );
 }
 
-function Operations({ incidents }: { incidents: Incident[] }) {
+function Operations({ incidents, operations }: { incidents: Incident[]; operations: OperationsData }) {
   const totalCalls = incidents.reduce((sum, item) => sum + item.statistics.toolCalls, 0);
   const incomplete = incidents.filter((item) => item.provenance.status !== "passed").length;
   const callData = incidents.slice().reverse().map((item) => ({ name: item.incidentId.replace("INC-", ""), calls: item.statistics.toolCalls, evidence: item.statistics.evidenceCount }));
   const callMax = Math.max(1, ...callData.flatMap((item) => [item.calls, item.evidence]));
+
+  const stageDurations = operations?.stageDurations ?? [];
+  const stageMax = Math.max(1, ...stageDurations.map((item) => item.avgMs));
+  const tokenTimeline = operations?.tokenTimeline ?? [];
+  const tokenMax = Math.max(1, ...tokenTimeline.map((item) => item.inputTokens + item.outputTokens));
+  const totals = operations?.llmTotals;
+  const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+  const fmtTok = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value));
+  const stageLabels: Record<string, string> = {
+    normalize: "정규화",
+    detect: "탐지 (Sigma·이상탐지)",
+    correlate: "사건 상관분석·묶기",
+    triage: "트리아지",
+    db: "DB 처리",
+    investigation: "조사 에이전트",
+    attack_mapping: "ATT&CK 매핑",
+    respond: "대응 권고 생성",
+    response: "대응 권고 생성",
+  };
 
   return (
     <div className="space-y-5">
@@ -1472,7 +1504,7 @@ function Operations({ incidents }: { incidents: Incident[] }) {
           ["조사 실행", `${incidents.length}건`, "완료 결과", Activity],
           ["도구 호출", `${totalCalls}회`, `평균 ${(totalCalls / Math.max(incidents.length, 1)).toFixed(1)}회`, Wrench],
           ["근거 경고", `${incomplete}건`, "추적성 확인", Fingerprint],
-          ["LLM 계측", "미연결", "토큰·지연시간", BrainCircuit],
+          ["LLM 사용량", totals ? `${fmtTok(totals.inputTokens + totals.outputTokens)} 토큰` : "미연결", totals ? `${totals.calls}회 호출` : "토큰·지연시간", BrainCircuit],
         ].map(([label, value, note, Icon]) => {
           const IconComponent = Icon as typeof Activity;
           return <article key={String(label)} className="signal-card p-5"><div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">{String(label)}</p><IconComponent className="size-4 text-cyan-300"/></div><p className="mt-5 font-mono text-2xl font-semibold">{String(value)}</p><p className="mt-2 text-xs text-muted-foreground">{String(note)}</p></article>;
@@ -1481,24 +1513,65 @@ function Operations({ incidents }: { incidents: Incident[] }) {
 
       <section className="grid gap-5 xl:grid-cols-2">
         <article className="signal-card p-5 sm:p-6">
-          <PanelTitle icon={BrainCircuit} title="시간대별 LLM 토큰" description="입력·출력·캐시 토큰 계측 슬롯" />
-          <div className="mt-6"><EmptyMetric label="토큰 사용량 데이터 없음" /></div>
+          <PanelTitle icon={BrainCircuit} title="시간대별 LLM 토큰" description="조사·매핑 LLM 입력·출력 토큰" />
+          {tokenTimeline.length ? (
+            <>
+              <div className="chart-grid mt-6 flex h-80 items-end gap-3 overflow-x-auto border-b border-white/10 px-2 pt-4">
+                {tokenTimeline.map((item, index) => (
+                  <div key={`${item.startedAt}-${index}`} className="group flex h-full min-w-16 flex-1 flex-col justify-end">
+                    <div
+                      tabIndex={0}
+                      aria-label={`${item.stage} · 입력 ${item.inputTokens.toLocaleString("ko-KR")} 토큰, 출력 ${item.outputTokens.toLocaleString("ko-KR")} 토큰`}
+                      className="relative flex h-[13rem] items-end justify-center gap-1.5 outline-none"
+                    >
+                      <span className="w-3 rounded-t bg-cyan-400/90" style={{ height: `${Math.max(item.inputTokens ? 7 : 0, (item.inputTokens / tokenMax) * 100)}%` }} />
+                      <span className="w-3 rounded-t bg-violet-400/85" style={{ height: `${Math.max(item.outputTokens ? 7 : 0, (item.outputTokens / tokenMax) * 100)}%` }} />
+                      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-lg border border-white/12 bg-[#101a27] px-3 py-2 text-left text-xs shadow-xl opacity-0 transition-opacity duration-75 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <span className="mb-1 block font-mono text-slate-400">{item.stage}</span>
+                        <span className="flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-cyan-400"/>입력 <strong className="ml-auto font-mono text-slate-100">{item.inputTokens.toLocaleString("ko-KR")} 토큰</strong></span>
+                        <span className="mt-1 flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-violet-400"/>출력 <strong className="ml-auto font-mono text-slate-100">{item.outputTokens.toLocaleString("ko-KR")} 토큰</strong></span>
+                      </span>
+                    </div>
+                    <p className="mt-3 truncate text-center font-mono text-[0.6rem] text-slate-500">{item.stage}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-4 text-xs text-muted-foreground"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-cyan-400"/>입력</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-violet-400"/>출력</span></div>
+            </>
+          ) : <div className="mt-6"><EmptyMetric label="토큰 사용량 데이터 없음" /></div>}
         </article>
         <article className="signal-card p-5 sm:p-6">
-          <PanelTitle icon={TimerReset} title="단계별 실행 시간" description="트리아지·조사·후속 단계 지연시간 슬롯" />
-          <div className="mt-6"><EmptyMetric label="실행 시간 데이터 없음" /></div>
+          <PanelTitle icon={TimerReset} title="단계별 실행 시간" description="주요 파이프라인 단계 평균 지연시간" />
+          {stageDurations.length ? (
+            <div className="mt-6 space-y-3">
+              {stageDurations.map((item) => (
+                <div key={item.stage} className="flex items-center gap-3">
+                  <span className="w-36 shrink-0 text-xs text-slate-300">{stageLabels[item.stage] ?? item.stage}</span>
+                  <div className="h-5 flex-1 overflow-hidden rounded bg-white/[0.04]">
+                    <div className="h-full rounded bg-emerald-400/70" style={{ width: `${Math.max(3, (item.avgMs / stageMax) * 100)}%` }} />
+                  </div>
+                  <span className="w-16 shrink-0 text-right font-mono text-xs text-slate-300">{fmtMs(item.avgMs)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div className="mt-6"><EmptyMetric label="실행 시간 데이터 없음" /></div>}
         </article>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+      <section>
         <article className="signal-card p-5 sm:p-6">
           <PanelTitle icon={BarChart3} title="사건별 조사량" description="현재 결과 JSON에서 확인 가능한 실제 통계" />
           <div className="chart-grid mt-6 flex h-72 items-end gap-3 overflow-x-auto border-b border-white/10 px-2 pt-5">
             {callData.map((item) => (
-              <div key={item.name} className="flex h-full min-w-14 flex-1 flex-col justify-end">
-                <div className="flex h-[13rem] items-end justify-center gap-1.5" title={`${item.name} · 도구 ${item.calls}, 증거 ${item.evidence}`}>
+              <div key={item.name} className="group flex h-full min-w-14 flex-1 flex-col justify-end">
+                <div tabIndex={0} aria-label={`${item.name} · 도구 호출 ${item.calls}회, 증거 ${item.evidence}건`} className="relative flex h-[13rem] items-end justify-center gap-1.5 outline-none">
                   <span className="w-3 rounded-t bg-cyan-400/90" style={{ height: `${Math.max(item.calls ? 7 : 0, (item.calls / callMax) * 100)}%` }} />
                   <span className="w-3 rounded-t bg-violet-400/85" style={{ height: `${Math.max(item.evidence ? 7 : 0, (item.evidence / callMax) * 100)}%` }} />
+                  <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 rounded-lg border border-white/12 bg-[#101a27] px-3 py-2 text-left text-xs shadow-xl opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <span className="mb-1 block font-mono text-slate-400">{item.name}</span>
+                    <span className="flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-cyan-400"/>도구 호출 <strong className="ml-auto font-mono text-slate-100">{item.calls}회</strong></span>
+                    <span className="mt-1 flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-violet-400"/>증거 <strong className="ml-auto font-mono text-slate-100">{item.evidence}건</strong></span>
+                  </span>
                 </div>
                 <p className="mt-3 truncate text-center font-mono text-[0.65rem] text-slate-500">{item.name}</p>
               </div>
@@ -1507,7 +1580,7 @@ function Operations({ incidents }: { incidents: Incident[] }) {
           <div className="mt-4 flex gap-4 text-xs text-muted-foreground"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-cyan-400"/>도구 호출</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-violet-400"/>증거</span></div>
         </article>
         <article className="signal-card p-5 sm:p-6">
-          <PanelTitle icon={Database} title="계측 계약" description="운영 상태 활성화에 필요한 입력" />
+          <PanelTitle icon={Database} title="연동 규격" description="운영 상태 활성화에 필요한 입력" />
           <div className="mt-6 space-y-3">
             {["run_id · incident_id · stage", "provider · model · operation", "input/output/cache tokens", "started_at · duration_ms", "retry_count · status · error_type"].map((item, index) => <div key={item} className="flex items-center gap-3 rounded-lg border border-white/8 bg-white/[0.02] p-3"><span className="grid size-6 place-items-center rounded-md bg-cyan-400/8 font-mono text-xs text-cyan-300">{index + 1}</span><code className="text-xs text-slate-300">{item}</code></div>)}
           </div>
@@ -1518,37 +1591,49 @@ function Operations({ incidents }: { incidents: Incident[] }) {
 }
 
 const pipelineSteps = [
-  { step: "01", title: "수집·정규화", subtitle: "Apache · Auth · Audit · Suricata", status: "active", icon: Database },
-  { step: "02", title: "탐지", subtitle: "Sigma · 이상탐지", status: "active", icon: Shield },
-  { step: "03", title: "사건 묶기", subtitle: "상관관계 연결", status: "active", icon: Layers3 },
-  { step: "04", title: "트리아지", subtitle: "조사 가치 · 우선순위", status: "active", icon: Bot },
-  { step: "05", title: "조사 에이전트", subtitle: "도구 선택 루프", status: "active", icon: BrainCircuit },
-  { step: "06", title: "판정·근거 검증", subtitle: "결론 · 신뢰도 · 출처", status: "active", icon: Fingerprint },
-  { step: "07", title: "ATT&CK 매핑", subtitle: "RAG · ID 검증", status: "active", icon: Network },
-  { step: "08", title: "대응 생성", subtitle: "근거 기반 조치", status: "active", icon: Sparkles },
-  { step: "09", title: "자율성 레벨", subtitle: "권고별 L0 · L1 · L2", status: "active", icon: Waypoints },
-  { step: "10", title: "대시보드", subtitle: "판정 · 근거 · 운영", status: "frame", icon: LayoutDashboard },
-];
+  { step: "1", title: "수집·정규화", subtitle: "Apache · Auth · Audit · Suricata", category: "logs", icon: Database },
+  { step: "2", title: "탐지", subtitle: "Sigma · 이상탐지", category: "ssoc", icon: Shield },
+  { step: "3", title: "사건 묶기", subtitle: "상관관계 연결", category: "ssoc", icon: Layers3 },
+  { step: "4", title: "트리아지", subtitle: "조사 가치 · 우선순위", category: "ssoc", icon: Bot },
+  { step: "5", title: "조사 에이전트", subtitle: "도구 선택 루프", category: "ssoc", icon: BrainCircuit },
+  { step: "6", title: "판정·근거 검증", subtitle: "결론 · 신뢰도 · 출처", category: "ssoc", icon: Fingerprint },
+  { step: "7", title: "ATT&CK 매핑", subtitle: "RAG · ID 검증", category: "ssoc", icon: Network },
+  { step: "8", title: "대응 생성", subtitle: "근거 기반 조치", category: "ssoc", icon: Sparkles },
+  { step: "9", title: "자율성 레벨", subtitle: "권고별 L0 · L1 · L2", category: "ssoc", icon: Waypoints },
+  { step: "10", title: "대시보드", subtitle: "판정 · 근거 · 운영", category: "dashboard", icon: LayoutDashboard },
+] as const;
+
+const pipelineCategoryStyles = {
+  logs: { label: "로그", card: "border-slate-400/25 bg-slate-400/[0.04]", icon: "text-slate-200", marker: "bg-slate-300" },
+  ssoc: { label: "SSOC", card: "border-emerald-400/20 bg-emerald-400/[0.035]", icon: "text-emerald-300", marker: "bg-emerald-400" },
+  dashboard: { label: "대시보드", card: "border-cyan-400/30 bg-cyan-400/[0.06]", icon: "text-cyan-300", marker: "bg-cyan-400" },
+} as const;
 
 function Pipeline() {
   return (
     <div className="space-y-5">
       <section className="signal-card p-5 sm:p-6">
-        <PanelTitle icon={GitBranch} title="SSOC 파이프라인 스냅샷" description="현재 구현 상태와 후속 단계 연결 위치" trailing={<Badge variant="outline" className="border-cyan-400/20 text-cyan-300">데모 파이프라인</Badge>} />
+        <PanelTitle icon={GitBranch} title="SSOC 파이프라인" description="SSOC 파이프라인의 전체 흐름을 단계별로 보여줍니다." trailing={<Badge variant="outline" className="border-cyan-400/20 text-cyan-300">PoC 파이프라인</Badge>} />
         <div className="mt-8 grid gap-3 lg:grid-cols-5">
           {pipelineSteps.map((item, index) => {
             const Icon = item.icon;
-            return <div key={item.step} className="relative">
-              <div className={`h-full min-h-36 rounded-xl border p-4 ${item.status === "active" ? "border-emerald-400/20 bg-emerald-400/[0.035]" : item.status === "frame" ? "border-cyan-400/30 bg-cyan-400/[0.06]" : "border-dashed border-slate-600/35 bg-black/10"}`}>
-                <div className="flex items-center justify-between"><span className="font-mono text-xs text-slate-400">단계 {item.step}</span><span className={`size-2 rounded-full ${item.status === "active" ? "bg-emerald-400" : item.status === "frame" ? "bg-cyan-400" : "border border-slate-500"}`}/></div>
-                <Icon className={`mt-5 size-5 ${item.status === "active" ? "text-emerald-300" : item.status === "frame" ? "text-cyan-300" : "text-slate-500"}`}/>
+            const categoryStyle = pipelineCategoryStyles[item.category];
+            const rowPlacement = ["", "", "", "", "", "lg:col-start-5 lg:row-start-2", "lg:col-start-4 lg:row-start-2", "lg:col-start-3 lg:row-start-2", "lg:col-start-2 lg:row-start-2", "lg:col-start-1 lg:row-start-2"][index];
+            return <div key={item.step} className={`relative ${rowPlacement}`}>
+              <div className={`h-full min-h-36 rounded-xl border p-4 ${categoryStyle.card}`}>
+                <div className="flex items-center justify-between"><span className="font-mono text-xs text-slate-400">{item.step} 단계</span><span className={`size-2 rounded-full ${categoryStyle.marker}`}/></div>
+                <Icon className={`mt-5 size-5 ${categoryStyle.icon}`}/>
                 <h3 className="mt-3 text-sm font-semibold">{item.title}</h3><p className="mt-1 text-xs leading-5 text-muted-foreground">{item.subtitle}</p>
               </div>
-              {index < pipelineSteps.length - 1 && index % 5 !== 4 && <ArrowRight className="absolute -right-[0.68rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 lg:block"/>}
+              {index < pipelineSteps.length - 1 && (index === 4
+                ? <ArrowRight className="absolute -bottom-[0.68rem] left-1/2 z-10 hidden size-4 -translate-x-1/2 rotate-90 text-slate-500 lg:block"/>
+                : index < 4
+                  ? <ArrowRight className="absolute -right-[0.68rem] top-1/2 z-10 hidden size-4 -translate-y-1/2 text-slate-500 lg:block"/>
+                  : <ArrowRight className="absolute -left-[0.68rem] top-1/2 z-10 hidden size-4 rotate-180 -translate-y-1/2 text-slate-500 lg:block"/>)}
             </div>;
           })}
         </div>
-        <div className="mt-5 flex flex-wrap gap-4 text-xs text-muted-foreground"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-emerald-400"/>구현·연결됨</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-cyan-400"/>현재 대시보드 틀</span><span className="flex items-center gap-2"><i className="size-2 rounded-full border border-slate-500"/>후속 산출물 대기</span></div>
+        <div className="mt-5 flex flex-wrap gap-4 text-xs text-muted-foreground">{Object.values(pipelineCategoryStyles).map((category) => <span key={category.label} className="flex items-center gap-2"><i className={`size-2 rounded-full ${category.marker}`}/>{category.label}</span>)}</div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
@@ -1767,7 +1852,7 @@ export default function Home() {
             if (incident) openIncident(incident);
           }} />}
           */}
-          {view === "operations" && <Operations incidents={incidents} />}
+          {view === "operations" && <Operations incidents={incidents} operations={(dashboardData as { operations?: OperationsData }).operations ?? null} />}
           {view === "pipeline" && <Pipeline />}
         </div>
       </section>

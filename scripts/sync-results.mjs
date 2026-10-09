@@ -509,20 +509,87 @@ async function writeJsonIfChanged(targetPath, contents) {
   return true;
 }
 
-async function readMatchingSnapshot(paths, source, incidents, pipeline) {
-  const expected = JSON.stringify({ source, incidents, pipeline });
+async function readMatchingSnapshot(paths, source, incidents, pipeline, operations) {
+  const expected = JSON.stringify({ source, incidents, pipeline, operations });
   for (const candidatePath of paths) {
     try {
       const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
       if (
         typeof candidate.generatedAt === "string"
-        && JSON.stringify({ source: candidate.source, incidents: candidate.incidents, pipeline: candidate.pipeline }) === expected
+        && JSON.stringify({ source: candidate.source, incidents: candidate.incidents, pipeline: candidate.pipeline, operations: candidate.operations ?? null }) === expected
       ) return candidate;
     } catch {
       // 다른 후보 스냅샷을 계속 확인합니다.
     }
   }
   return null;
+}
+
+const METRICS_SUBDIR = "metrics";
+const STAGE_ORDER = ["normalize", "detect", "correlate", "triage", "db", "investigation", "respond"];
+
+// results/metrics/*.jsonl(파이프라인이 append)을 읽어 운영 상태 패널용으로 집계한다.
+// 메트릭 폴더가 없거나 비면 null(= 미연결). 반쯤 쓰인 줄은 무시한다.
+async function readOperations() {
+  const dir = path.join(inputDir, METRICS_SUBDIR);
+  let names;
+  try {
+    names = (await readdir(dir)).filter((name) => name.endsWith(".jsonl"));
+  } catch {
+    return null;
+  }
+  const rows = [];
+  for (const name of names) {
+    let text;
+    try {
+      text = await readFile(path.join(dir, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        rows.push(JSON.parse(trimmed));
+      } catch {
+        // 아직 완전히 기록되지 않은 줄 — 다음 틱에 다시 읽힌다.
+      }
+    }
+  }
+  if (!rows.length) return null;
+
+  const byStage = new Map();
+  for (const row of rows) {
+    if (typeof row.duration_ms !== "number") continue;
+    const acc = byStage.get(row.stage) ?? { stage: row.stage, total: 0, count: 0 };
+    acc.total += row.duration_ms;
+    acc.count += 1;
+    byStage.set(row.stage, acc);
+  }
+  const stageDurations = [...byStage.values()]
+    .map((acc) => ({ stage: acc.stage, avgMs: Math.round(acc.total / acc.count), count: acc.count }))
+    .sort((a, b) => STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage));
+
+  const tokenTimeline = rows
+    .filter((row) => typeof row.input_tokens === "number")
+    .sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)))
+    .map((row) => ({
+      startedAt: row.started_at,
+      stage: row.stage,
+      model: row.model ?? null,
+      inputTokens: row.input_tokens ?? 0,
+      outputTokens: row.output_tokens ?? 0,
+      cacheReadTokens: row.cache_read_tokens ?? 0,
+    }));
+
+  const llmTotals = tokenTimeline.reduce((total, row) => ({
+    inputTokens: total.inputTokens + row.inputTokens,
+    outputTokens: total.outputTokens + row.outputTokens,
+    cacheReadTokens: total.cacheReadTokens + row.cacheReadTokens,
+    calls: total.calls + 1,
+  }), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0 });
+
+  return { stageDurations, tokenTimeline, llmTotals };
 }
 
 export async function syncResults({ writeModuleSnapshot = true } = {}) {
@@ -594,6 +661,7 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
   incidents.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
   const pipeline = buildPipeline(await loadDetections(), incidents);
   if (pipeline.error) console.warn(`[sync-results] ${pipeline.error}`);
+  const operations = await readOperations();
   const source = path.relative(defaultInputDir, inputDir) === ""
     ? "results/*.json"
     : "SSOC_RESULTS_DIR/*.json";
@@ -602,8 +670,9 @@ export async function syncResults({ writeModuleSnapshot = true } = {}) {
     source,
     incidents,
     pipeline,
+    operations,
   );
-  const snapshot = existingSnapshot ?? { generatedAt: new Date().toISOString(), source, incidents, pipeline };
+  const snapshot = existingSnapshot ?? { generatedAt: new Date().toISOString(), source, incidents, pipeline, operations };
   const contents = `${JSON.stringify(snapshot, null, 2)}\n`;
 
   await Promise.all([
