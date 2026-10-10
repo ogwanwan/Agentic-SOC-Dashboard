@@ -60,4 +60,6 @@ node_modules/
 .next/
 .env
 /soc.db
+/soc.db-shm
+/soc.db-wal
 /results/

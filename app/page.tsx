@@ -1472,7 +1472,7 @@ function IncidentDetail({ incident, open, onOpenChange, timezone /* , onOpenResp
   );
 }
 
-function Operations({ incidents, operations }: { incidents: Incident[]; operations: OperationsData }) {
+function Operations({ incidents, operations, timezone }: { incidents: Incident[]; operations: OperationsData; timezone: Timezone }) {
   const totalCalls = incidents.reduce((sum, item) => sum + item.statistics.toolCalls, 0);
   const incomplete = incidents.filter((item) => item.provenance.status !== "passed").length;
   const callData = incidents.slice().reverse().map((item) => ({ name: item.incidentId.replace("INC-", ""), calls: item.statistics.toolCalls, evidence: item.statistics.evidenceCount }));
@@ -1481,7 +1481,24 @@ function Operations({ incidents, operations }: { incidents: Incident[]; operatio
   const stageDurations = operations?.stageDurations ?? [];
   const stageMax = Math.max(1, ...stageDurations.map((item) => item.avgMs));
   const tokenTimeline = operations?.tokenTimeline ?? [];
-  const tokenMax = Math.max(1, ...tokenTimeline.map((item) => item.inputTokens + item.outputTokens));
+  const tokenHourlyData = (() => {
+    const buckets = new Map<number, { stamp: number; label: string; inputTokens: number; outputTokens: number }>();
+    for (const item of tokenTimeline) {
+      const parsed = new Date(item.startedAt);
+      if (Number.isNaN(parsed.getTime())) continue;
+      const stamp = Math.floor(parsed.getTime() / 3_600_000) * 3_600_000;
+      const bucket = buckets.get(stamp) ?? {
+        stamp,
+        label: formatDate(new Date(stamp).toISOString(), timezone),
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+      bucket.inputTokens += item.inputTokens;
+      bucket.outputTokens += item.outputTokens;
+      buckets.set(stamp, bucket);
+    }
+    return [...buckets.values()].sort((a, b) => a.stamp - b.stamp);
+  })();
   const totals = operations?.llmTotals;
   const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
   const fmtTok = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value));
@@ -1513,30 +1530,22 @@ function Operations({ incidents, operations }: { incidents: Incident[]; operatio
 
       <section className="grid gap-5 xl:grid-cols-2">
         <article className="signal-card p-5 sm:p-6">
-          <PanelTitle icon={BrainCircuit} title="시간대별 LLM 토큰" description="조사·매핑 LLM 입력·출력 토큰" />
-          {tokenTimeline.length ? (
+          <PanelTitle icon={BrainCircuit} title="시간대별 LLM 토큰" description="시간대별 LLM 입력·출력 토큰" trailing={<div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs text-muted-foreground"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-cyan-400"/>입력</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-violet-400"/>출력</span><Badge variant="outline" className="border-white/10 bg-white/[0.04] font-mono text-muted-foreground">{timezone}</Badge></div>} />
+          {tokenHourlyData.length ? (
             <>
-              <div className="chart-grid mt-6 flex h-80 items-end gap-3 overflow-x-auto border-b border-white/10 px-2 pt-4">
-                {tokenTimeline.map((item, index) => (
-                  <div key={`${item.startedAt}-${index}`} className="group flex h-full min-w-16 flex-1 flex-col justify-end">
-                    <div
-                      tabIndex={0}
-                      aria-label={`${item.stage} · 입력 ${item.inputTokens.toLocaleString("ko-KR")} 토큰, 출력 ${item.outputTokens.toLocaleString("ko-KR")} 토큰`}
-                      className="relative flex h-[13rem] items-end justify-center gap-1.5 outline-none"
-                    >
-                      <span className="w-3 rounded-t bg-cyan-400/90" style={{ height: `${Math.max(item.inputTokens ? 7 : 0, (item.inputTokens / tokenMax) * 100)}%` }} />
-                      <span className="w-3 rounded-t bg-violet-400/85" style={{ height: `${Math.max(item.outputTokens ? 7 : 0, (item.outputTokens / tokenMax) * 100)}%` }} />
-                      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-0 z-20 -translate-x-1/2 rounded-lg border border-white/12 bg-[#101a27] px-3 py-2 text-left text-xs shadow-xl opacity-0 transition-opacity duration-75 group-hover:opacity-100 group-focus-within:opacity-100">
-                        <span className="mb-1 block font-mono text-slate-400">{item.stage}</span>
-                        <span className="flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-cyan-400"/>입력 <strong className="ml-auto font-mono text-slate-100">{item.inputTokens.toLocaleString("ko-KR")} 토큰</strong></span>
-                        <span className="mt-1 flex items-center gap-2 whitespace-nowrap"><i className="size-2 rounded-full bg-violet-400"/>출력 <strong className="ml-auto font-mono text-slate-100">{item.outputTokens.toLocaleString("ko-KR")} 토큰</strong></span>
-                      </span>
-                    </div>
-                    <p className="mt-3 truncate text-center font-mono text-[0.6rem] text-slate-500">{item.stage}</p>
-                  </div>
-                ))}
+              <div className="mt-7 h-64 min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={tokenHourlyData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="32.5%" accessibilityLayer>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1b3038" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#8a9da7", fontSize: 12 }} />
+                    <YAxis width={56} tickLine={false} axisLine={false} allowDecimals={false} tickFormatter={(value) => fmtTok(Number(value))} tick={{ fill: "#8a9da7", fontSize: 12 }} />
+                    <Tooltip cursor={false} formatter={(value, name) => [`${Number(value).toLocaleString("ko-KR")} 토큰`, name]} contentStyle={{ background: "#0c181e", border: "1px solid #213942", borderRadius: 10, fontSize: 13 }} />
+                    <Bar dataKey="inputTokens" name="입력 토큰" fill="#22d3ee" barSize={12} radius={[3, 3, 0, 0]} activeBar={false} isAnimationActive={false} />
+                    <Bar dataKey="outputTokens" name="출력 토큰" fill="#a78bfa" barSize={12} radius={[3, 3, 0, 0]} activeBar={false} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="mt-4 flex gap-4 text-xs text-muted-foreground"><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-cyan-400"/>입력</span><span className="flex items-center gap-2"><i className="size-2 rounded-full bg-violet-400"/>출력</span></div>
+              
             </>
           ) : <div className="mt-6"><EmptyMetric label="토큰 사용량 데이터 없음" /></div>}
         </article>
@@ -1852,7 +1861,7 @@ export default function Home() {
             if (incident) openIncident(incident);
           }} />}
           */}
-          {view === "operations" && <Operations incidents={incidents} operations={(dashboardData as { operations?: OperationsData }).operations ?? null} />}
+          {view === "operations" && <Operations incidents={incidents} operations={(dashboardData as { operations?: OperationsData }).operations ?? null} timezone={timezone} />}
           {view === "pipeline" && <Pipeline />}
         </div>
       </section>
