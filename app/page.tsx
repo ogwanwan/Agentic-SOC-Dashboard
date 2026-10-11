@@ -1649,8 +1649,7 @@ function Pipeline() {
         <article className="signal-card p-5 sm:p-6">
           <PanelTitle icon={Server} title="모델 연결" description="코드 구성 기준 스냅샷" />
           <div className="mt-6 space-y-3">
-            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">claude-sonnet-5 · 거절 시 claude-sonnet-4-6</p><p className="mt-2 text-xs text-muted-foreground">조사 에이전트와 ATT&CK 매핑 선택 단계가 같은 모델을 씁니다. 트리아지 1차 의견은 claude-haiku-4-5입니다.</p></div>
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4"><p className="text-xs text-muted-foreground">지원 제공자</p><p className="mt-2 font-medium">Google Gemini</p><p className="mt-3 text-xs text-muted-foreground">LLM_PROVIDER=gemini 로 교체 가능</p></div>
+            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">claude-sonnet-5-5 · 거절 시 claude-sonnet-4-6</p><p className="mt-2 text-xs text-muted-foreground">조사 에이전트·ATT&CK 매핑·트리아지 모두 같은 모델을 씁니다.</p></div>
             <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100/65">조사 결과 JSON에는 실제 실행 모델 ID가 기록되지 않아, 결과별 사용 모델은 확인할 수 없습니다.</div>
           </div>
         </article>
