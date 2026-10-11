@@ -1500,7 +1500,7 @@ function Operations({ incidents, operations, timezone }: { incidents: Incident[]
     return [...buckets.values()].sort((a, b) => a.stamp - b.stamp);
   })();
   const totals = operations?.llmTotals;
-  const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+  const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}초` : `${(ms / 1000).toFixed(2)}초`);
   const fmtTok = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value));
   const stageLabels: Record<string, string> = {
     normalize: "정규화",

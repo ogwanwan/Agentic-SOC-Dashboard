@@ -526,7 +526,7 @@ async function readMatchingSnapshot(paths, source, incidents, pipeline, operatio
 }
 
 const METRICS_SUBDIR = "metrics";
-const STAGE_ORDER = ["normalize", "detect", "correlate", "triage", "db", "investigation", "respond"];
+const STAGE_ORDER = ["normalize", "detect", "correlate", "triage", "investigation", "respond", "db"];
 
 // results/metrics/*.jsonl(파이프라인이 append)을 읽어 운영 상태 패널용으로 집계한다.
 // 메트릭 폴더가 없거나 비면 null(= 미연결). 반쯤 쓰인 줄은 무시한다.
