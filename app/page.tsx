@@ -1504,7 +1504,7 @@ function Operations({ incidents, operations, timezone }: { incidents: Incident[]
   const fmtTok = (value: number) => (value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value));
   const stageLabels: Record<string, string> = {
     normalize: "정규화",
-    detect: "탐지 (Sigma·이상탐지)",
+    detect: "탐지 (Sigma·Suricata)",
     correlate: "사건 상관분석·묶기",
     triage: "트리아지",
     db: "DB 처리",
@@ -1649,8 +1649,8 @@ function Pipeline() {
         <article className="signal-card p-5 sm:p-6">
           <PanelTitle icon={Server} title="모델 연결" description="코드 구성 기준 스냅샷" />
           <div className="mt-6 space-y-3">
-            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">claude-sonnet-5-5 · 거절 시 claude-sonnet-4-6</p><p className="mt-2 text-xs text-muted-foreground">조사 에이전트·ATT&CK 매핑·트리아지 모두 같은 모델을 씁니다.</p></div>
-            <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100/65">조사 결과 JSON에는 실제 실행 모델 ID가 기록되지 않아, 결과별 사용 모델은 확인할 수 없습니다.</div>
+            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.04] p-4"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground">기본 제공자</p><p className="mt-2 font-medium">Anthropic Claude</p></div><Badge variant="outline" className="border-cyan-400/20 text-cyan-300">기본값</Badge></div><p className="mt-3 font-mono text-xs text-slate-300">claude-sonnet-5-5 · effort low · 거절 시 claude-sonnet-4-6</p><p className="mt-2 text-xs text-muted-foreground">모든 단계가 동일 모델·설정을 씁니다.</p></div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4"><p className="text-xs text-muted-foreground">단계별 모델</p><div className="mt-3 space-y-1.5 text-xs text-slate-300"><div className="flex items-center justify-between"><span>트리아지</span><span className="font-mono text-slate-400">sonnet-5-5 · low</span></div><div className="flex items-center justify-between"><span>조사 에이전트</span><span className="font-mono text-slate-400">sonnet-5-5 · low</span></div><div className="flex items-center justify-between"><span>ATT&CK 매핑</span><span className="font-mono text-slate-400">sonnet-5-5 · low</span></div><div className="flex items-center justify-between"><span>대응 권고</span><span className="font-mono text-slate-400">sonnet-5-5 · low</span></div></div></div>
           </div>
         </article>
 
